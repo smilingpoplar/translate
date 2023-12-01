@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/smilingpoplar/translate/util"
 )
 
 const BaseURL = "https://translate.google.com/translate_a/t"
@@ -27,6 +29,12 @@ func New() *Google {
 }
 
 func (g *Google) Translate(texts []string) ([]string, error) {
+	return util.Retry(func() ([]string, error) {
+		return g.translate(texts)
+	})
+}
+
+func (g *Google) translate(texts []string) ([]string, error) {
 	// 构造请求
 	queryParams := url.Values{}
 	queryParams.Set("sl", "auto")
@@ -52,7 +60,7 @@ func (g *Google) Translate(texts []string) ([]string, error) {
 	req = req.WithContext(ctx)
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	userAgent := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+	userAgent := "GoogleTranslate/6.18.0.06.376053713 (Linux; U; Android 11; GM1900)"
 	req.Header.Set("User-Agent", userAgent)
 
 	// 发送请求
@@ -67,8 +75,12 @@ func (g *Google) Translate(texts []string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading response: %w", err)
 	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error http status code: %d", resp.StatusCode)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return nil, util.ErrTooManyRequests
+		}
+		return nil, fmt.Errorf("error http status: %s", http.StatusText(resp.StatusCode))
 	}
 
 	// 解析响应
