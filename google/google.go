@@ -60,8 +60,7 @@ func (g *Google) translate(texts []string) ([]string, error) {
 	req = req.WithContext(ctx)
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	userAgent := "GoogleTranslate/6.18.0.06.376053713 (Linux; U; Android 11; GM1900)"
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	// 发送请求
 	resp, err := g.Client.Do(req)
@@ -99,4 +98,25 @@ func (g *Google) translate(texts []string) ([]string, error) {
 		result = append(result, line[0])
 	}
 	return result, nil
+}
+
+func userAgent() string {
+	return fmt.Sprintf("GoogleTranslate/6.%d.0.06.%d (Linux; U; Android %d; %s)",
+		util.RandInt(10, 100),
+		util.RandInt(111111111, 999999999),
+		util.RandInt(5, 11),
+		randModelNum(2, 4))
+}
+
+func randModelNum(letterCount, digitCount int) string {
+	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const digits = "0123456789"
+	data := make([]byte, 0, letterCount+digitCount)
+	for i := 0; i < letterCount; i++ {
+		data = append(data, letters[util.RandInt(0, len(letters))])
+	}
+	for i := 0; i < digitCount; i++ {
+		data = append(data, digits[util.RandInt(0, len(digits))])
+	}
+	return string(data)
 }
