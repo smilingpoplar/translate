@@ -26,7 +26,7 @@ func New() *Google {
 	}
 }
 
-func (g *Google) Translate(text string) (string, error) {
+func (g *Google) Translate(texts []string) ([]string, error) {
 	// 构造请求
 	queryParams := url.Values{}
 	queryParams.Set("sl", "auto")
@@ -40,10 +40,12 @@ func (g *Google) Translate(text string) (string, error) {
 	apiURL := fmt.Sprintf("%s?%s", BaseURL, queryParams.Encode())
 
 	postData := url.Values{}
-	postData.Set("q", text)
+	for _, text := range texts {
+		postData.Add("q", text)
+	}
 	req, err := http.NewRequest("POST", apiURL, strings.NewReader(postData.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("error creating request: %w", err)
+		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -56,26 +58,33 @@ func (g *Google) Translate(text string) (string, error) {
 	// 发送请求
 	resp, err := g.Client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("error sending request: %w", err)
+		return nil, fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// 读取响应
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("error reading response: %w", err)
+		return nil, fmt.Errorf("error reading response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("error http status code: %d", resp.StatusCode)
 	}
 
 	// 解析响应
 	var data [][]string
 	err = json.Unmarshal(body, &data)
 	if err != nil {
-		return "", fmt.Errorf("error unmarshalling JSON: %w, resp body: %s", err, string(body))
+		return nil, fmt.Errorf("error unmarshalling JSON: %w, resp body: %s", err, string(body))
 	}
 
 	if len(data) == 0 || len(data[0]) != 2 {
-		return "", fmt.Errorf("error resp data: %v", data)
+		return nil, fmt.Errorf("error resp data: %v", data)
 	}
 
-	return data[0][0], nil
+	var result []string
+	for _, line := range data {
+		result = append(result, line[0])
+	}
+	return result, nil
 }

@@ -9,7 +9,7 @@ import (
 )
 
 type Translator interface {
-	Translate(text string) (string, error)
+	Translate(texts []string) ([]string, error)
 }
 
 func Main() int {
@@ -24,13 +24,20 @@ func Main() int {
 		return 1
 	}
 
-	text := flag.Arg(0)
-	translated, err := cli.Translate(text)
+	texts := flag.Args()
+	if len(texts) == 0 {
+		fmt.Fprintln(os.Stderr, "no text to translate")
+		return 1
+	}
+
+	result, err := cli.Translate(texts)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "err translate:", err)
 		return 1
 	}
-	fmt.Println(translated)
+	for _, line := range result {
+		fmt.Println(line)
+	}
 
 	return 0
 }

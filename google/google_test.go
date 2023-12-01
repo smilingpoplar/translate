@@ -8,14 +8,19 @@ import (
 
 func TestTranslate(t *testing.T) {
 	t.Parallel()
-	text := "hello world"
-	expect := "你好世界"
+	texts := []string{"hello", "world"}
+	expect := []string{"你好", "世界"}
 	g := google.New()
-	got, err := g.Translate(text)
+	got, err := g.Translate(texts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if expect != got {
-		t.Errorf("expect %s, got %s", expect, got)
+	if len(got) != len(expect) {
+		t.Fatalf("expect len %d, got len %d", len(expect), len(got))
+	}
+	for i := range got {
+		if got[i] != expect[i] {
+			t.Errorf("expect %s, got %s", expect, got)
+		}
 	}
 }
