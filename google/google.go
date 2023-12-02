@@ -20,18 +20,32 @@ const BaseURL = "https://translate.google.com/translate_a/t"
 
 type Google struct {
 	Client *http.Client
+	maxLen int
 }
 
 func New() *Google {
 	return &Google{
 		Client: &http.Client{},
+		maxLen: 1000000,
 	}
 }
 
 func (g *Google) Translate(texts []string) ([]string, error) {
-	return util.Retry(func() ([]string, error) {
-		return g.translate(texts)
-	})
+	lists, err := util.RegroupTexts(texts, g.maxLen)
+	if err != nil {
+		return nil, fmt.Errorf("error split texts: %w", err)
+	}
+	var result []string
+	for _, list := range lists {
+		part, err := util.Retry(func() ([]string, error) {
+			return g.translate(list)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error translate: %w", err)
+		}
+		result = append(result, part...)
+	}
+	return result, nil
 }
 
 func (g *Google) translate(texts []string) ([]string, error) {
