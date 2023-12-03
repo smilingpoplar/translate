@@ -12,11 +12,12 @@ import (
 )
 
 type Translator interface {
-	Translate(texts []string) ([]string, error)
+	Translate(texts []string, toLang string) ([]string, error)
 }
 
 func Main() int {
 	engine := flag.String("engine", "google", "translate engine")
+	tolang := flag.String("tolang", "zh-CN", "target language")
 	flag.Parse()
 
 	var cli Translator
@@ -45,7 +46,7 @@ func Main() int {
 		return 1
 	}
 	var result []string
-	if result, err = cli.Translate(texts); err != nil {
+	if result, err = cli.Translate(texts, *tolang); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

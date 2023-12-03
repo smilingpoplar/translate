@@ -30,7 +30,7 @@ func New() *Google {
 	}
 }
 
-func (g *Google) Translate(texts []string) ([]string, error) {
+func (g *Google) Translate(texts []string, toLang string) ([]string, error) {
 	lists, err := util.RegroupTexts(texts, g.maxLen)
 	if err != nil {
 		return nil, fmt.Errorf("error split texts: %w", err)
@@ -38,7 +38,7 @@ func (g *Google) Translate(texts []string) ([]string, error) {
 	var result []string
 	for _, list := range lists {
 		part, err := util.Retry(func() ([]string, error) {
-			return g.translate(list)
+			return g.translate(list, toLang)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("error translate: %w", err)
@@ -48,11 +48,11 @@ func (g *Google) Translate(texts []string) ([]string, error) {
 	return result, nil
 }
 
-func (g *Google) translate(texts []string) ([]string, error) {
+func (g *Google) translate(texts []string, toLang string) ([]string, error) {
 	// 构造请求
 	queryParams := url.Values{}
 	queryParams.Set("sl", "auto")
-	queryParams.Set("tl", "zh-CN")
+	queryParams.Set("tl", toLang)
 	queryParams.Set("ie", "UTF-8")
 	queryParams.Set("oe", "UTF-8")
 	queryParams.Set("client", "at")

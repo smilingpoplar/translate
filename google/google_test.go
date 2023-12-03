@@ -11,7 +11,7 @@ func TestTranslate(t *testing.T) {
 	texts := []string{"hello", "world"}
 	expect := []string{"你好", "世界"}
 	g := google.New()
-	got, err := g.Translate(texts)
+	got, err := g.Translate(texts, "zh-CN")
 	if err != nil {
 		t.Fatal(err)
 	}
