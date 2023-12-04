@@ -19,33 +19,27 @@ import (
 const BaseURL = "https://translate.google.com/translate_a/t"
 
 type Google struct {
-	Client *http.Client
-	maxLen int
+	Client      *http.Client
+	textLimiter *util.TextLimiter
 }
 
 func New() *Google {
-	return &Google{
+	g := &Google{
 		Client: &http.Client{},
-		maxLen: 1000000,
 	}
+	g.textLimiter = &util.TextLimiter{
+		MaxLen: 1000000,
+		Translator: func(texts []string, toLang string) ([]string, error) {
+			return util.Retry(func() ([]string, error) {
+				return g.translate(texts, toLang)
+			})
+		},
+	}
+	return g
 }
 
 func (g *Google) Translate(texts []string, toLang string) ([]string, error) {
-	lists, err := util.RegroupTexts(texts, g.maxLen)
-	if err != nil {
-		return nil, fmt.Errorf("error split texts: %w", err)
-	}
-	var result []string
-	for _, list := range lists {
-		part, err := util.Retry(func() ([]string, error) {
-			return g.translate(list, toLang)
-		})
-		if err != nil {
-			return nil, fmt.Errorf("error translate: %w", err)
-		}
-		result = append(result, part...)
-	}
-	return result, nil
+	return g.textLimiter.Translate(texts, toLang)
 }
 
 func (g *Google) translate(texts []string, toLang string) ([]string, error) {
