@@ -18,11 +18,17 @@ type Translator interface {
 func Main() int {
 	engine := flag.String("engine", "google", "translate engine")
 	tolang := flag.String("tolang", "zh-CN", "target language")
+	proxy := flag.String("proxy", "", "http|socks5 proxy, e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:7890")
 	flag.Parse()
 
 	var cli Translator
 	if *engine == "google" {
-		cli = google.New()
+		g := google.New()
+		if err := util.SetProxy(*proxy, g.Client); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		cli = g
 	} else {
 		fmt.Fprintln(os.Stderr, "not support engine:", *engine)
 		return 1
