@@ -11,3 +11,15 @@ translate "hello world"
 
 cat input.txt | translate > output.txt
 ```
+
+### 使用 Docker
+
+```sh
+docker build -t translate .
+```
+
+```sh
+docker run --rm translate "hello world"
+
+cat input.txt | docker run --rm -i translate > output.txt
+```
