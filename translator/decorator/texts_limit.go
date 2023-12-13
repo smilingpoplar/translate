@@ -98,3 +98,7 @@ func mergeBack(list []string, info *splitInfo) []string {
 	}
 	return list[:info.Len]
 }
+
+func (d *TextsLimit) OnTranslated(f func([]string) error) {
+	d.inner.(*TextsRegroup).OnTranslated(f)
+}

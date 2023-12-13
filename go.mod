@@ -3,6 +3,7 @@ module github.com/smilingpoplar/translate
 go 1.21.4
 
 require (
+	github.com/sashabaranov/go-openai v1.17.9
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/net v0.19.0
 	golang.org/x/term v0.15.0
