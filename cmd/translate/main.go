@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -49,20 +50,19 @@ func translate(args []string) error {
 	}
 
 	var reader io.Reader = os.Stdin
-	if len(args) > 0 { // 翻译命令行参数
-		reader = strings.NewReader(strings.Join(args, "\n"))
-	} else { // 从os.Stdin读取要翻译的文本
-		if util.IsTerminal() { // 输出命令行提示
-			fmt.Println("Input texts to be translated... <Ctrl-D> to finish.")
+	if len(args) == 0 { // 从os.Stdin读取要翻译的文本
+		if util.IsTerminal() {
+			return translateInTerminal(trans)
 		}
+	} else { // 翻译命令行参数
+		reader = strings.NewReader(strings.Join(args, "\n"))
 	}
 	var writer io.Writer = os.Stdout
 
-	var texts []string
+	var texts, result []string
 	if texts, err = util.ReadLines(reader); err != nil {
 		return err
 	}
-	var result []string
 	if result, err = trans.Translate(texts, tolang); err != nil {
 		return err
 	}
@@ -71,6 +71,23 @@ func translate(args []string) error {
 	}
 
 	return nil
+}
+
+func translateInTerminal(trans translator.Translator) error {
+	fmt.Println("Input texts to be translated... <Ctrl-D> to finish.")
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
+			continue
+		}
+		result, err := trans.Translate([]string{text}, tolang)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stdout, result[0])
+	}
+	return scanner.Err()
 }
 
 func getTranslator() (translator.Translator, error) {
