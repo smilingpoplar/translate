@@ -1,34 +1,33 @@
-package util
+package decorator
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/smilingpoplar/translate/translator"
 )
 
-type TextLimiter struct {
-	MaxLen     int
-	Translator func([]string, string) ([]string, error)
+type TextsLimit struct {
+	inner  translator.Translator
+	MaxLen int
 }
 
-func (tl *TextLimiter) Translate(texts []string, toLang string) ([]string, error) {
-	texts, info, err := splitLongTexts(texts, tl.MaxLen)
+func TextsLimitDecorator(inner translator.Translator, maxLen int) *TextsLimit {
+	return &TextsLimit{
+		inner:  TextsRegroupDecorator(inner, maxLen),
+		MaxLen: maxLen,
+	}
+}
+
+func (d *TextsLimit) Translate(texts []string, toLang string) ([]string, error) {
+	texts, info, err := splitLongTexts(texts, d.MaxLen)
 	if err != nil {
 		return nil, fmt.Errorf("error split long text: %w", err)
 	}
-	groups, err := regroupTexts(texts, tl.MaxLen)
+	result, err := d.inner.Translate(texts, toLang)
 	if err != nil {
-		return nil, fmt.Errorf("error group texts: %w", err)
+		return nil, err
 	}
-
-	var result []string
-	for _, group := range groups {
-		part, err := tl.Translator(group, toLang)
-		if err != nil {
-			return nil, fmt.Errorf("error translate: %w", err)
-		}
-		result = append(result, part...)
-	}
-
 	result = mergeBack(result, info)
 	return result, nil
 }

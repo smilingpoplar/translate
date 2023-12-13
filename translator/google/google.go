@@ -13,33 +13,40 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smilingpoplar/translate/translator"
+	"github.com/smilingpoplar/translate/translator/decorator"
 	"github.com/smilingpoplar/translate/util"
 )
 
 const BaseURL = "https://translate.google.com/translate_a/t"
 
 type Google struct {
-	Client      *http.Client
-	textLimiter *util.TextLimiter
+	client *http.Client
+	inner  translator.Translator
 }
 
 func New() *Google {
-	g := &Google{
-		Client: &http.Client{},
-	}
-	g.textLimiter = &util.TextLimiter{
-		MaxLen: 1000000,
-		Translator: func(texts []string, toLang string) ([]string, error) {
-			return util.Retry(func() ([]string, error) {
-				return g.translate(texts, toLang)
-			})
-		},
-	}
+	g, _ := NewWithProxy("")
 	return g
 }
 
+func NewWithProxy(proxy string) (*Google, error) {
+	g := &Google{
+		client: &http.Client{},
+	}
+	if proxy != "" {
+		if err := util.SetProxy(proxy, g.client); err != nil {
+			return nil, fmt.Errorf("error creating google translator: %w", err)
+		}
+	}
+	var fn translator.Translator = translator.TextsTranslator(g.translate)
+	fn = decorator.RetryDecorator(fn, 5, 5)
+	g.inner = decorator.TextsLimitDecorator(fn, 1000000)
+	return g, nil
+}
+
 func (g *Google) Translate(texts []string, toLang string) ([]string, error) {
-	return g.textLimiter.Translate(texts, toLang)
+	return g.inner.Translate(texts, toLang)
 }
 
 func (g *Google) translate(texts []string, toLang string) ([]string, error) {
@@ -71,7 +78,7 @@ func (g *Google) translate(texts []string, toLang string) ([]string, error) {
 	req.Header.Set("User-Agent", userAgent())
 
 	// 发送请求
-	resp, err := g.Client.Do(req)
+	resp, err := g.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error sending request: %w", err)
 	}
@@ -85,7 +92,7 @@ func (g *Google) translate(texts []string, toLang string) ([]string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return nil, util.ErrTooManyRequests
+			return nil, decorator.ErrTooManyRequests
 		}
 		return nil, fmt.Errorf("error http status: %s", http.StatusText(resp.StatusCode))
 	}

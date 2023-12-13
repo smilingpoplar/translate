@@ -2,6 +2,8 @@ package google
 
 import (
 	"testing"
+
+	"github.com/smilingpoplar/translate/translator/decorator"
 )
 
 func TestTranslate(t *testing.T) {
@@ -23,12 +25,16 @@ func TestTranslate(t *testing.T) {
 	}
 }
 
-func TestTranslateWithTextLimit(t *testing.T) {
+func TestTranslateWithTextsLimit(t *testing.T) {
 	t.Parallel()
 	texts := []string{"hello\nworld", "hello"}
 	expect := []string{"你好\n世界", "你好"}
 	g := New()
-	g.textLimiter.MaxLen = 6
+	if tl, ok := g.inner.(*decorator.TextsLimit); ok {
+		tl.MaxLen = 6
+	} else {
+		t.Fatal("expect TextLimitDecorator")
+	}
 
 	got, err := g.Translate(texts, "zh-CN")
 	if err != nil {
