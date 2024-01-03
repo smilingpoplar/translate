@@ -111,7 +111,7 @@ func getTranslator() (translator.Translator, error) {
 	var trans translator.Translator
 	var err error
 	if engine == "google" {
-		trans, err = google.NewWithProxy(proxy)
+		trans, err = google.New(google.WithProxy(proxy))
 	} else if engine == "openai" {
 		trans, err = getTranslatorOpenAI()
 	} else {
@@ -137,5 +137,5 @@ func getTranslatorOpenAI() (translator.Translator, error) {
 		}
 		return nil, fmt.Errorf(msg)
 	}
-	return openai.NewWithProxy(oaiAPIKey, oaiAPIBase, proxy)
+	return openai.New(oaiAPIKey, oaiAPIBase, openai.WithProxy(proxy))
 }

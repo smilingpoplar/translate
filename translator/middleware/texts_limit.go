@@ -1,35 +1,26 @@
-package decorator
+package middleware
 
 import (
 	"fmt"
 	"strings"
-
-	"github.com/smilingpoplar/translate/translator"
 )
 
-type TextsLimit struct {
-	inner  translator.Translator
-	MaxLen int
-}
-
-func TextsLimitDecorator(inner translator.Translator, maxLen int) *TextsLimit {
-	return &TextsLimit{
-		inner:  TextsRegroupDecorator(inner, maxLen),
-		MaxLen: maxLen,
+func TextsLimit(maxLen int) Middleware {
+	return func(handler Handler) Handler {
+		handler = TextsRegroup(maxLen)(handler)
+		return func(texts []string, toLang string) ([]string, error) {
+			texts, info, err := splitLongTexts(texts, maxLen)
+			if err != nil {
+				return nil, fmt.Errorf("error split long text: %w", err)
+			}
+			result, err := handler(texts, toLang)
+			if err != nil {
+				return nil, err
+			}
+			result = mergeBack(result, info)
+			return result, nil
+		}
 	}
-}
-
-func (d *TextsLimit) Translate(texts []string, toLang string) ([]string, error) {
-	texts, info, err := splitLongTexts(texts, d.MaxLen)
-	if err != nil {
-		return nil, fmt.Errorf("error split long text: %w", err)
-	}
-	result, err := d.inner.Translate(texts, toLang)
-	if err != nil {
-		return nil, err
-	}
-	result = mergeBack(result, info)
-	return result, nil
 }
 
 // 防止texts的总字节数>maxLen，对texts分组
@@ -97,8 +88,4 @@ func mergeBack(list []string, info *splitInfo) []string {
 		list[i] = strings.Join(result, "\n")
 	}
 	return list[:info.Len]
-}
-
-func (d *TextsLimit) OnTranslated(f func([]string) error) {
-	d.inner.(*TextsRegroup).OnTranslated(f)
 }

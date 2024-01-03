@@ -3,14 +3,17 @@ package google
 import (
 	"testing"
 
-	"github.com/smilingpoplar/translate/translator/decorator"
+	"github.com/smilingpoplar/translate/translator/middleware"
 )
 
 func TestTranslate(t *testing.T) {
 	t.Parallel()
 	texts := []string{"hello", "world"}
 	expect := []string{"你好", "世界"}
-	g := New()
+	g, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := g.Translate(texts, "zh-CN")
 	if err != nil {
 		t.Fatal(err)
@@ -29,12 +32,12 @@ func TestTranslateWithTextsLimit(t *testing.T) {
 	t.Parallel()
 	texts := []string{"hello\nworld", "hello"}
 	expect := []string{"你好\n世界", "你好"}
-	g := New()
-	if tl, ok := g.inner.(*decorator.TextsLimit); ok {
-		tl.MaxLen = 6
-	} else {
-		t.Fatal("expect TextLimitDecorator")
+	g, err := New()
+	if err != nil {
+		t.Fatal(err)
 	}
+	mw := middleware.TextsLimit(6)
+	g.handler = mw(g.translate)
 
 	got, err := g.Translate(texts, "zh-CN")
 	if err != nil {

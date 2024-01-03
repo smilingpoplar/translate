@@ -13,40 +13,41 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smilingpoplar/translate/translator"
-	"github.com/smilingpoplar/translate/translator/decorator"
+	"github.com/smilingpoplar/translate/translator/middleware"
 	"github.com/smilingpoplar/translate/util"
 )
 
 const BaseURL = "https://translate.google.com/translate_a/t"
 
 type Google struct {
-	client *http.Client
-	inner  translator.Translator
+	client  *http.Client
+	handler middleware.Handler
 }
 
-func New() *Google {
-	g, _ := NewWithProxy("")
-	return g
-}
+type option func(*Google) error
 
-func NewWithProxy(proxy string) (*Google, error) {
+func New(opts ...option) (*Google, error) {
 	g := &Google{
 		client: &http.Client{},
 	}
-	if proxy != "" {
-		if err := util.SetProxy(proxy, g.client); err != nil {
+	for _, opt := range opts {
+		if err := opt(g); err != nil {
 			return nil, fmt.Errorf("error creating google translator: %w", err)
 		}
 	}
-	var fn translator.Translator = translator.TextsTranslator(g.translate)
-	fn = decorator.RetryDecorator(fn, 5, 5)
-	g.inner = decorator.TextsLimitDecorator(fn, 1000000)
+	chain := middleware.Chain(
+		middleware.TextsLimit(1000000),
+		middleware.Retry(5, 5),
+	)
+	g.handler = chain(g.translate)
+
 	return g, nil
 }
 
-func (g *Google) Translate(texts []string, toLang string) ([]string, error) {
-	return g.inner.Translate(texts, toLang)
+func WithProxy(proxy string) option {
+	return func(g *Google) error {
+		return util.SetProxy(proxy, g.client)
+	}
 }
 
 func (g *Google) translate(texts []string, toLang string) ([]string, error) {
@@ -92,7 +93,7 @@ func (g *Google) translate(texts []string, toLang string) ([]string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return nil, decorator.ErrTooManyRequests
+			return nil, middleware.ErrTooManyRequests
 		}
 		return nil, fmt.Errorf("error http status: %s", http.StatusText(resp.StatusCode))
 	}
@@ -134,4 +135,8 @@ func randModelNum(letterCount, digitCount int) string {
 		data = append(data, digits[util.RandInt(0, len(digits))])
 	}
 	return string(data)
+}
+
+func (g *Google) Translate(texts []string, toLang string) ([]string, error) {
+	return g.handler(texts, toLang)
 }

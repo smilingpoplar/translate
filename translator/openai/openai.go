@@ -6,24 +6,22 @@ import (
 	"strings"
 
 	oai "github.com/sashabaranov/go-openai"
-	"github.com/smilingpoplar/translate/translator"
-	"github.com/smilingpoplar/translate/translator/decorator"
+	"github.com/smilingpoplar/translate/translator/middleware"
 	"github.com/smilingpoplar/translate/util"
 )
 
 const BaseURL = "https://api.openai.com/v1"
 
 type OpenAI struct {
-	client *oai.Client
-	inner  translator.Translator
+	config  *oai.ClientConfig
+	client  *oai.Client
+	handler middleware.Handler
+	onTrans func([]string) error
 }
 
-func New(key, baseURL string) *OpenAI {
-	o, _ := NewWithProxy(key, baseURL, "")
-	return o
-}
+type option func(*OpenAI) error
 
-func NewWithProxy(key, baseURL, proxy string) (*OpenAI, error) {
+func New(key, baseURL string, opts ...option) (*OpenAI, error) {
 	if baseURL == "" {
 		baseURL = BaseURL
 	} else {
@@ -34,23 +32,30 @@ func NewWithProxy(key, baseURL, proxy string) (*OpenAI, error) {
 	}
 
 	o := &OpenAI{}
+	chain := middleware.Chain(
+		middleware.TextLimit(3000),
+		middleware.OnTranslated(&o.onTrans),
+		middleware.Retry(5, 3),
+	)
+	o.handler = chain(middleware.TextHandler(o.translate))
+
 	config := oai.DefaultConfig(key)
 	config.BaseURL = baseURL
-	if proxy != "" {
-		if err := util.SetProxy(proxy, config.HTTPClient); err != nil {
+	o.config = &config
+	for _, opt := range opts {
+		if err := opt(o); err != nil {
 			return nil, fmt.Errorf("error creating openai translator: %w", err)
 		}
 	}
 	o.client = oai.NewClientWithConfig(config)
 
-	var fn translator.Translator = translator.TextTranslator(o.translate)
-	fn = decorator.RetryDecorator(fn, 5, 3)
-	o.inner = decorator.TextLimitDecorator(fn, 3000)
 	return o, nil
 }
 
-func (o *OpenAI) Translate(texts []string, toLang string) ([]string, error) {
-	return o.inner.Translate(texts, toLang)
+func WithProxy(proxy string) option {
+	return func(o *OpenAI) error {
+		return util.SetProxy(proxy, o.config.HTTPClient)
+	}
 }
 
 func (o *OpenAI) translate(text string, toLang string) (string, error) {
@@ -77,6 +82,10 @@ func (o *OpenAI) translate(text string, toLang string) (string, error) {
 	return result, nil
 }
 
+func (o *OpenAI) Translate(texts []string, toLang string) ([]string, error) {
+	return o.handler(texts, toLang)
+}
+
 func (o *OpenAI) OnTranslated(f func([]string) error) {
-	o.inner.(*decorator.TextLimit).OnTranslated(f)
+	o.onTrans = f
 }
