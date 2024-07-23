@@ -7,26 +7,50 @@ import (
 	"os"
 	"strings"
 
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/smilingpoplar/translate/translator"
 	"github.com/smilingpoplar/translate/translator/google"
 	"github.com/smilingpoplar/translate/translator/openai"
 	"github.com/smilingpoplar/translate/util"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+const (
+	kEngine = "engine"
+	kGoogle = "google"
+	kOpenAI = "openai"
+	kTolang = "tolang"
+	kProxy  = "proxy"
+
+	kOaiAPIKey  = "openai.api-key"
+	kOaiAPIBase = "openai.api-base"
 )
 
 var (
 	engine string
 	tolang string
 	proxy  string
-)
 
-var (
 	oaiAPIKey  string
 	oaiAPIBase string
 )
 
 func main() {
-	var cmd = &cobra.Command{
+	cmd := initCmd()
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func initCmd() *cobra.Command {
+	if err := initConfig(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	cmd := &cobra.Command{
 		Short: "translate text to target language",
 		Use: `translate "hello world"
   cat input.txt | translate > output.txt`,
@@ -37,18 +61,46 @@ func main() {
 			}
 		},
 	}
-	cmd.Flags().StringVarP(&engine, "engine", "e", "google", `translate engine,
-eg. google, openai`)
-	cmd.Flags().StringVarP(&tolang, "tolang", "t", "zh-CN", "target language")
-	cmd.Flags().StringVarP(&proxy, "proxy", "p", "", `http or socks5 proxy,
-eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890`)
-	cmd.Flags().StringVarP(&oaiAPIKey, "api-key", "k", "", "required: openai")
-	cmd.Flags().StringVarP(&oaiAPIBase, "api-base", "b", "", fmt.Sprintf("optional: openai (default %q)", openai.BaseURL))
 
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	cmd.Flags().StringVarP(&engine, kEngine, "e", viper.GetString(kEngine), `translate engine, eg. google, openai`)
+	cmd.Flags().StringVarP(&tolang, kTolang, "t", viper.GetString(kTolang), "target language")
+	cmd.Flags().StringVarP(&proxy, kProxy, "p", viper.GetString(kProxy), `http or socks5 proxy,
+	eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890`)
+	cmd.Flags().StringVarP(&oaiAPIKey, kOaiAPIKey, "", viper.GetString(kOaiAPIKey), "required: openai")
+	cmd.Flags().StringVarP(&oaiAPIBase, kOaiAPIBase, "", viper.GetString(kOaiAPIBase), "optional: openai")
+
+	viper.BindPFlags(cmd.Flags())
+
+	return cmd
+}
+
+func initConfig() error {
+	viper.SetDefault(kEngine, kGoogle)
+	viper.SetDefault(kTolang, "zh-CN")
+	viper.SetDefault(kOaiAPIBase, openai.BaseURL)
+
+	home, err := homedir.Dir()
+	if err != nil {
+		return fmt.Errorf("error find homedir, %w", err)
 	}
+	configDir := home + "/.config/translate/"
+	viper.AddConfigPath(configDir)
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("error mkdir %s, %w", configDir, err)
+	}
+	if err := viper.ReadInConfig(); err != nil {
+		// 第一次运行，没有配置文件
+		if err := viper.SafeWriteConfig(); err != nil {
+			return fmt.Errorf("error write config, %w", err)
+		}
+	}
+	viper.AutomaticEnv()
+	// 将viper.Get(key)的key中'.'和'-'替换为'_'
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
+
+	return nil
 }
 
 func translate(args []string) error {
@@ -110,9 +162,9 @@ func translateInTerminal(trans translator.Translator) error {
 func getTranslator() (translator.Translator, error) {
 	var trans translator.Translator
 	var err error
-	if engine == "google" {
+	if engine == kGoogle {
 		trans, err = google.New(google.WithProxy(proxy))
-	} else if engine == "openai" {
+	} else if engine == kOpenAI {
 		trans, err = getTranslatorOpenAI()
 	} else {
 		err = fmt.Errorf("unsupported engine: %s", engine)
@@ -122,19 +174,9 @@ func getTranslator() (translator.Translator, error) {
 
 func getTranslatorOpenAI() (translator.Translator, error) {
 	API_KEY, BASE_URL := "OPENAI_API_KEY", "OPENAI_BASE_URL"
-	// 先从命令行获取，再从环境变量获取
-	if oaiAPIKey == "" {
-		oaiAPIKey = os.Getenv(API_KEY)
-	}
-	if oaiAPIBase == "" {
-		oaiAPIBase = os.Getenv(BASE_URL)
-	}
-
 	if oaiAPIKey == "" {
 		msg := fmt.Sprintf("%s is not set, set it with `export %s=YOUR_API_KEY`", API_KEY, API_KEY)
-		if oaiAPIBase == "" {
-			msg += fmt.Sprintf("\n%s default %q, set it with `export %s=YOUR_BASE_URL`", BASE_URL, openai.BaseURL, BASE_URL)
-		}
+		msg += fmt.Sprintf("\n%s is %q, set it with `export %s=YOUR_BASE_URL`", BASE_URL, oaiAPIBase, BASE_URL)
 		return nil, fmt.Errorf(msg)
 	}
 	return openai.New(oaiAPIKey, oaiAPIBase, openai.WithProxy(proxy))
