@@ -65,7 +65,7 @@ func splitLongTexts(texts []string, maxLen int) ([]string, *splitInfo, error) {
 			continue
 		}
 
-		lines := strings.Split(text, "\n")
+		lines := splitLongText(text, maxLen)
 		lists, err := regroupTexts(lines, maxLen)
 		if err != nil {
 			return nil, nil, err
@@ -77,6 +77,42 @@ func splitLongTexts(texts []string, maxLen int) ([]string, *splitInfo, error) {
 		texts[i] = ""
 	}
 	return texts, info, nil
+}
+
+func splitLongText(text string, maxLen int) []string {
+	var result []string
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		if len(line) <= maxLen {
+			result = append(result, line)
+			continue
+		}
+
+		var paragram []string
+		paragramLen := 0
+		sentences := strings.Split(line, ". ")
+		for i, sentence := range sentences {
+			if i < len(sentences)-1 {
+				sentence += ". "
+			}
+			sentenceLen := len(sentence)
+			if paragramLen+sentenceLen <= maxLen {
+				paragram = append(paragram, sentence)
+				paragramLen += sentenceLen
+			} else {
+				if paragramLen > 0 {
+					result = append(result, strings.Join(paragram, ""))
+				}
+				paragram = []string{sentence}
+				paragramLen = sentenceLen
+			}
+		}
+		result = append(result, strings.Join(paragram, ""))
+	}
+	for _, a := range result {
+		fmt.Println(a)
+	}
+	return result
 }
 
 func mergeBack(list []string, info *splitInfo) []string {

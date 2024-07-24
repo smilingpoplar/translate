@@ -28,7 +28,7 @@ func TestTranslate(t *testing.T) {
 	}
 }
 
-func TestTranslateWithTextsLimit(t *testing.T) {
+func TestTextsLimit(t *testing.T) {
 	t.Parallel()
 	texts := []string{"hello\nworld", "hello"}
 	expect := []string{"你好\n世界", "你好"}
@@ -37,6 +37,31 @@ func TestTranslateWithTextsLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	mw := middleware.TextsLimit(6)
+	g.handler = mw(g.translate)
+
+	got, err := g.Translate(texts, "zh-CN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(expect) {
+		t.Fatalf("expect len %d, got len %d", len(expect), len(got))
+	}
+	for i := range got {
+		if got[i] != expect[i] {
+			t.Errorf("expect %s, got %s", expect, got)
+		}
+	}
+}
+
+func TestTextsLimitWithLongText(t *testing.T) {
+	t.Parallel()
+	texts := []string{"hello. world.", "hello"}
+	expect := []string{"你好。\n世界。", "你好"}
+	g, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := middleware.TextsLimit(8)
 	g.handler = mw(g.translate)
 
 	got, err := g.Translate(texts, "zh-CN")
