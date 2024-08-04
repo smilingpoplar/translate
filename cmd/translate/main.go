@@ -24,7 +24,9 @@ const (
 	kProxy  = "proxy"
 
 	kOaiAPIKey  = "openai.api-key"
-	kOaiAPIBase = "openai.api-base"
+	kOaiBaseURL = "openai.base-url"
+	kOaiModel   = "openai.model"
+	kOaiPrompt  = "openai.prompt"
 )
 
 var (
@@ -33,7 +35,9 @@ var (
 	proxy  string
 
 	oaiAPIKey  string
-	oaiAPIBase string
+	oaiBaseURL string
+	oaiModel   string
+	oaiPrompt  string
 )
 
 func main() {
@@ -62,12 +66,14 @@ func initCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&engine, kEngine, "e", viper.GetString(kEngine), `translate engine, eg. google, openai`)
+	cmd.Flags().StringVarP(&engine, kEngine, "e", viper.GetString(kEngine), "translate engine, eg. google, openai")
 	cmd.Flags().StringVarP(&tolang, kTolang, "t", viper.GetString(kTolang), "target language")
-	cmd.Flags().StringVarP(&proxy, kProxy, "p", viper.GetString(kProxy), `http or socks5 proxy,
-	eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890`)
-	cmd.Flags().StringVarP(&oaiAPIKey, kOaiAPIKey, "", viper.GetString(kOaiAPIKey), "required: openai")
-	cmd.Flags().StringVarP(&oaiAPIBase, kOaiAPIBase, "", viper.GetString(kOaiAPIBase), "optional: openai")
+	cmd.Flags().StringVarP(&proxy, kProxy, "p", viper.GetString(kProxy), "http or socks5 proxy,\n eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890")
+	cmd.Flags().StringVarP(&oaiAPIKey, kOaiAPIKey, "", viper.GetString(kOaiAPIKey), "required: openai, use any string if your openai compatible\n service (such as ollama) needs no key\n")
+	cmd.Flags().StringVarP(&oaiBaseURL, kOaiBaseURL, "", viper.GetString(kOaiBaseURL), "optional: openai")
+	cmd.Flags().StringVarP(&oaiModel, kOaiModel, "", viper.GetString(kOaiModel), "optional: openai")
+	cmd.Flags().StringVarP(&oaiPrompt, kOaiPrompt, "", viper.GetString(kOaiPrompt), "optional: openai")
+	cmd.MarkFlagsMutuallyExclusive(kOaiPrompt, kTolang)
 
 	viper.BindPFlags(cmd.Flags())
 
@@ -77,7 +83,8 @@ func initCmd() *cobra.Command {
 func initConfig() error {
 	viper.SetDefault(kEngine, kGoogle)
 	viper.SetDefault(kTolang, "zh-CN")
-	viper.SetDefault(kOaiAPIBase, openai.BaseURL)
+	viper.SetDefault(kOaiBaseURL, openai.BaseURL)
+	viper.SetDefault(kOaiModel, openai.DefaultModel)
 
 	home, err := homedir.Dir()
 	if err != nil {
@@ -176,8 +183,12 @@ func getTranslatorOpenAI() (translator.Translator, error) {
 	API_KEY, BASE_URL := "OPENAI_API_KEY", "OPENAI_BASE_URL"
 	if oaiAPIKey == "" {
 		msg := fmt.Sprintf("%s is not set, set it with `export %s=YOUR_API_KEY`", API_KEY, API_KEY)
-		msg += fmt.Sprintf("\n%s is %q, set it with `export %s=YOUR_BASE_URL`", BASE_URL, oaiAPIBase, BASE_URL)
+		msg += fmt.Sprintf("\n%s is %q, set it with `export %s=YOUR_BASE_URL`", BASE_URL, oaiBaseURL, BASE_URL)
 		return nil, fmt.Errorf(msg)
 	}
-	return openai.New(oaiAPIKey, oaiAPIBase, openai.WithProxy(proxy))
+	return openai.New(oaiAPIKey,
+		openai.WithBaseURL(oaiBaseURL),
+		openai.WithModel(oaiModel),
+		openai.WithPrompt(oaiPrompt),
+		openai.WithProxy(proxy))
 }

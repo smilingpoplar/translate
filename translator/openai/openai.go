@@ -10,27 +10,23 @@ import (
 	"github.com/smilingpoplar/translate/util"
 )
 
-const BaseURL = "https://api.openai.com/v1"
+const (
+	BaseURL      = "https://api.openai.com/v1"
+	DefaultModel = oai.GPT3Dot5Turbo
+)
 
 type OpenAI struct {
 	config  *oai.ClientConfig
 	client  *oai.Client
+	model   string
+	prompt  string
 	handler middleware.Handler
 	onTrans func([]string) error
 }
 
 type option func(*OpenAI) error
 
-func New(key, baseURL string, opts ...option) (*OpenAI, error) {
-	if baseURL == "" {
-		baseURL = BaseURL
-	} else {
-		if strings.LastIndex(baseURL, "/v") == -1 {
-			idx := strings.LastIndex(BaseURL, "/v")
-			baseURL += BaseURL[idx:]
-		}
-	}
-
+func New(key string, opts ...option) (*OpenAI, error) {
 	o := &OpenAI{}
 	chain := middleware.Chain(
 		middleware.TextLimit(3000),
@@ -40,7 +36,6 @@ func New(key, baseURL string, opts ...option) (*OpenAI, error) {
 	o.handler = chain(middleware.TextHandler(o.translate))
 
 	config := oai.DefaultConfig(key)
-	config.BaseURL = baseURL
 	o.config = &config
 	for _, opt := range opts {
 		if err := opt(o); err != nil {
@@ -52,6 +47,38 @@ func New(key, baseURL string, opts ...option) (*OpenAI, error) {
 	return o, nil
 }
 
+func WithBaseURL(baseURL string) option {
+	return func(o *OpenAI) error {
+		if baseURL == "" {
+			baseURL = BaseURL
+		} else {
+			if strings.LastIndex(baseURL, "/v") == -1 {
+				idx := strings.LastIndex(BaseURL, "/v")
+				baseURL += BaseURL[idx:]
+			}
+		}
+		o.config.BaseURL = baseURL
+		return nil
+	}
+}
+
+func WithModel(model string) option {
+	return func(o *OpenAI) error {
+		if model == "" {
+			model = DefaultModel
+		}
+		o.model = model
+		return nil
+	}
+}
+
+func WithPrompt(prompt string) option {
+	return func(o *OpenAI) error {
+		o.prompt = prompt
+		return nil
+	}
+}
+
 func WithProxy(proxy string) option {
 	return func(o *OpenAI) error {
 		return util.SetProxy(proxy, o.config.HTTPClient)
@@ -59,9 +86,12 @@ func WithProxy(proxy string) option {
 }
 
 func (o *OpenAI) translate(text string, toLang string) (string, error) {
-	prompt := fmt.Sprintf("You're a translator. Translate to %s.", toLang)
+	prompt := o.prompt
+	if prompt == "" {
+		prompt = fmt.Sprintf("translate to %s, no extra text", toLang)
+	}
 	resp, err := o.client.CreateChatCompletion(context.Background(), oai.ChatCompletionRequest{
-		Model: oai.GPT3Dot5Turbo,
+		Model: o.model,
 		Messages: []oai.ChatCompletionMessage{
 			{
 				Role:    oai.ChatMessageRoleSystem,
