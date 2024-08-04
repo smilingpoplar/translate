@@ -109,9 +109,6 @@ func splitLongText(text string, maxLen int) []string {
 		}
 		result = append(result, strings.Join(paragram, ""))
 	}
-	for _, a := range result {
-		fmt.Println(a)
-	}
 	return result
 }
 

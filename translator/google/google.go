@@ -22,6 +22,7 @@ const BaseURL = "https://translate.google.com/translate_a/t"
 type Google struct {
 	client  *http.Client
 	handler middleware.Handler
+	onTrans func([]string) error
 }
 
 type option func(*Google) error
@@ -37,6 +38,7 @@ func New(opts ...option) (*Google, error) {
 	}
 	chain := middleware.Chain(
 		middleware.TextsLimit(1000000),
+		middleware.OnTranslated(&g.onTrans),
 		middleware.Retry(5, 5),
 	)
 	g.handler = chain(g.translate)
@@ -139,4 +141,8 @@ func randModelNum(letterCount, digitCount int) string {
 
 func (g *Google) Translate(texts []string, toLang string) ([]string, error) {
 	return g.handler(texts, toLang)
+}
+
+func (g *Google) OnTranslated(f func([]string) error) {
+	g.onTrans = f
 }

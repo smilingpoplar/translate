@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"golang.org/x/term"
 )
@@ -34,4 +35,15 @@ func WriteLines(w io.Writer, lines []string) error {
 }
 func IsTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+func ReplaceWithDict(texts []string, dict map[string]string) []string {
+	result := make([]string, len(texts))
+	for i, text := range texts {
+		for k, v := range dict {
+			text = strings.ReplaceAll(text, k, v)
+		}
+		result[i] = text
+	}
+	return result
 }

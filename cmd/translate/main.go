@@ -7,33 +7,29 @@ import (
 	"os"
 	"strings"
 
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/joho/godotenv"
+	"github.com/smilingpoplar/translate/config"
 	"github.com/smilingpoplar/translate/translator"
-	"github.com/smilingpoplar/translate/translator/google"
-	"github.com/smilingpoplar/translate/translator/openai"
 	"github.com/smilingpoplar/translate/util"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const (
-	kEngine = "engine"
-	kGoogle = "google"
-	kOpenAI = "openai"
-	kTolang = "tolang"
-	kProxy  = "proxy"
-
-	kOaiAPIKey  = "openai.api-key"
-	kOaiAPIBase = "openai.api-base"
+	kService = "service"
+	kGoogle  = "google"
+	kTolang  = "tolang"
+	kLangCN  = "zh-CN"
+	kEnvFile = "envfile"
+	kProxy   = "proxy"
+	KFixFile = "fixfile"
 )
 
 var (
-	engine string
-	tolang string
-	proxy  string
-
-	oaiAPIKey  string
-	oaiAPIBase string
+	service string
+	tolang  string
+	envfile string
+	proxy   string
+	fixfile string
 )
 
 func main() {
@@ -45,75 +41,58 @@ func main() {
 }
 
 func initCmd() *cobra.Command {
-	if err := initConfig(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
 	cmd := &cobra.Command{
 		Short: "translate text to target language",
 		Use: `translate "hello world"
   cat input.txt | translate > output.txt`,
 		DisableFlagsInUseLine: true,
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := translate(args); err != nil {
-				fmt.Fprintln(os.Stderr, err)
+		SilenceErrors:         true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := initEnv(); err != nil {
+				return err
 			}
+			return translate(args)
 		},
 	}
 
-	cmd.Flags().StringVarP(&engine, kEngine, "e", viper.GetString(kEngine), `translate engine, eg. google, openai`)
-	cmd.Flags().StringVarP(&tolang, kTolang, "t", viper.GetString(kTolang), "target language")
-	cmd.Flags().StringVarP(&proxy, kProxy, "p", viper.GetString(kProxy), `http or socks5 proxy,
-	eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890`)
-	cmd.Flags().StringVarP(&oaiAPIKey, kOaiAPIKey, "", viper.GetString(kOaiAPIKey), "required: openai")
-	cmd.Flags().StringVarP(&oaiAPIBase, kOaiAPIBase, "", viper.GetString(kOaiAPIBase), "optional: openai")
-
-	viper.BindPFlags(cmd.Flags())
+	services := fmt.Sprintf("translate service, eg. %s", strings.Join(config.GetAllServiceStrs(), ", "))
+	cmd.Flags().StringVarP(&service, kService, "s", kGoogle, services)
+	cmd.Flags().StringVarP(&tolang, kTolang, "t", kLangCN, "target language")
+	cmd.Flags().StringVarP(&envfile, kEnvFile, "e", "", "env file")
+	cmd.Flags().StringVarP(&proxy, kProxy, "p", "", "http or socks5 proxy,\n eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890")
+	cmd.Flags().StringVarP(&fixfile, KFixFile, "f", "", "csv file to fix translation")
 
 	return cmd
 }
 
-func initConfig() error {
-	viper.SetDefault(kEngine, kGoogle)
-	viper.SetDefault(kTolang, "zh-CN")
-	viper.SetDefault(kOaiAPIBase, openai.BaseURL)
+func initEnv() error {
+	args := []string{}
+	if envfile != "" {
+		args = append(args, envfile)
+	}
+	err := godotenv.Load(args...)
 
-	home, err := homedir.Dir()
-	if err != nil {
-		return fmt.Errorf("error find homedir, %w", err)
+	if envfile != "" && err != nil {
+		return fmt.Errorf("error loading .env file (%s): %w", envfile, err)
 	}
-	configDir := home + "/.config/translate/"
-	viper.AddConfigPath(configDir)
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("error mkdir %s, %w", configDir, err)
-	}
-	if err := viper.ReadInConfig(); err != nil {
-		// 第一次运行，没有配置文件
-		if err := viper.SafeWriteConfig(); err != nil {
-			return fmt.Errorf("error write config, %w", err)
-		}
-	}
-	viper.AutomaticEnv()
-	// 将viper.Get(key)的key中'.'和'-'替换为'_'
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-
 	return nil
 }
 
 func translate(args []string) error {
 	var trans translator.Translator
 	var err error
-	if trans, err = getTranslator(); err != nil {
+	if trans, err = translator.GetTranslator(service, proxy); err != nil {
+		return err
+	}
+	var fixes []util.FixTransform
+	if fixes, err = util.LoadTranslationFixes(fixfile); err != nil {
 		return err
 	}
 
 	var reader io.Reader = os.Stdin
 	if len(args) == 0 { // 从os.Stdin读取要翻译的文本
 		if util.IsTerminal() {
-			return translateInTerminal(trans)
+			return translateInTerminal(trans, fixes)
 		}
 	} else { // 翻译命令行参数
 		reader = strings.NewReader(strings.Join(args, "\n"))
@@ -123,7 +102,7 @@ func translate(args []string) error {
 	o, ok := trans.(translator.TranslationObserver)
 	if ok { // 收到分组响应后立即输出
 		o.OnTranslated(func(result []string) error {
-			return util.WriteLines(writer, result)
+			return OnTranslated(writer, result, fixes)
 		})
 	}
 	var texts, result []string
@@ -134,7 +113,7 @@ func translate(args []string) error {
 		return err
 	}
 	if !ok { // 收到全部响应后再输出
-		if err = util.WriteLines(writer, result); err != nil {
+		if err = OnTranslated(writer, result, fixes); err != nil {
 			return err
 		}
 	}
@@ -142,7 +121,7 @@ func translate(args []string) error {
 	return nil
 }
 
-func translateInTerminal(trans translator.Translator) error {
+func translateInTerminal(trans translator.Translator, fixes []util.FixTransform) error {
 	fmt.Println("Input texts to be translated... <Ctrl-D> to finish.")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -154,30 +133,13 @@ func translateInTerminal(trans translator.Translator) error {
 		if err != nil {
 			return err
 		}
+		util.ApplyTranslationFixes(result, fixes)
 		fmt.Fprintln(os.Stdout, result[0])
 	}
 	return scanner.Err()
 }
 
-func getTranslator() (translator.Translator, error) {
-	var trans translator.Translator
-	var err error
-	if engine == kGoogle {
-		trans, err = google.New(google.WithProxy(proxy))
-	} else if engine == kOpenAI {
-		trans, err = getTranslatorOpenAI()
-	} else {
-		err = fmt.Errorf("unsupported engine: %s", engine)
-	}
-	return trans, err
-}
-
-func getTranslatorOpenAI() (translator.Translator, error) {
-	API_KEY, BASE_URL := "OPENAI_API_KEY", "OPENAI_BASE_URL"
-	if oaiAPIKey == "" {
-		msg := fmt.Sprintf("%s is not set, set it with `export %s=YOUR_API_KEY`", API_KEY, API_KEY)
-		msg += fmt.Sprintf("\n%s is %q, set it with `export %s=YOUR_BASE_URL`", BASE_URL, oaiAPIBase, BASE_URL)
-		return nil, fmt.Errorf(msg)
-	}
-	return openai.New(oaiAPIKey, oaiAPIBase, openai.WithProxy(proxy))
+func OnTranslated(writer io.Writer, result []string, fixes []util.FixTransform) error {
+	util.ApplyTranslationFixes(result, fixes)
+	return util.WriteLines(writer, result)
 }
