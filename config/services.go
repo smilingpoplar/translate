@@ -1,7 +1,6 @@
 package config
 
 import (
-	"embed"
 	"fmt"
 	"log"
 	"os"
@@ -9,9 +8,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-//go:embed services.yaml
-var embedFS embed.FS
 
 var servicesConfig = getServicesConfig()
 
