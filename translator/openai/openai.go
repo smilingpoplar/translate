@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	oai "github.com/sashabaranov/go-openai"
+	"github.com/smilingpoplar/translate/config"
 	"github.com/smilingpoplar/translate/translator/middleware"
 	"github.com/smilingpoplar/translate/util"
 )
@@ -29,11 +30,11 @@ type option func(*OpenAI) error
 func New(key string, opts ...option) (*OpenAI, error) {
 	o := &OpenAI{}
 	chain := middleware.Chain(
-		middleware.TextLimit(3000),
+		middleware.TextsLimit(5000),
 		middleware.OnTranslated(&o.onTrans),
 		middleware.Retry(5, 3),
 	)
-	o.handler = chain(middleware.TextHandler(o.translate))
+	o.handler = chain(o.translate)
 
 	config := oai.DefaultConfig(key)
 	o.config = &config
@@ -85,31 +86,36 @@ func WithProxy(proxy string) option {
 	}
 }
 
-func (o *OpenAI) translate(text string, toLang string) (string, error) {
+func (o *OpenAI) translate(texts []string, toLang string) ([]string, error) {
 	prompt := o.prompt
 	if prompt == "" {
-		prompt = fmt.Sprintf("translate to %s, no extra text", toLang)
+		var err error
+		prompt, err = config.GetPrompt(texts, toLang)
+		if err != nil {
+			return nil, fmt.Errorf("error translating: %w", err)
+		}
 	}
+
 	resp, err := o.client.CreateChatCompletion(context.Background(), oai.ChatCompletionRequest{
 		Model: o.model,
 		Messages: []oai.ChatCompletionMessage{
 			{
-				Role:    oai.ChatMessageRoleSystem,
-				Content: prompt,
-			},
-			{
 				Role:    oai.ChatMessageRoleUser,
-				Content: text,
+				Content: prompt,
 			},
 		},
 	},
 	)
 	if err != nil {
-		return "", fmt.Errorf("error translating: %w", err)
+		return nil, fmt.Errorf("error translating: %w", err)
 	}
 
 	result := resp.Choices[0].Message.Content
-	return result, nil
+	parsed, err := config.ParseResponse(result)
+	if err != nil {
+		return nil, fmt.Errorf("error translating: %w", err)
+	}
+	return parsed, nil
 }
 
 func (o *OpenAI) Translate(texts []string, toLang string) ([]string, error) {

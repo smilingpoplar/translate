@@ -1,7 +1,6 @@
 package config
 
 import (
-	"embed"
 	"fmt"
 	"log"
 	"os"
@@ -9,9 +8,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-//go:embed services.yaml
-var embedFS embed.FS
 
 var servicesConfig = getServicesConfig()
 
@@ -30,7 +26,6 @@ func getServicesConfig() map[string]any {
 
 const (
 	kRequired = "required"
-	kOptional = "optional"
 	kDefault  = "default"
 	kType     = "type"
 	kOpenAI   = "openai"
@@ -106,13 +101,10 @@ func (sc *ServiceConfig) ValidateEnvArgs() error {
 
 func (sc *ServiceConfig) getEnvArgsInfo() string {
 	msg := "Please set the environment variables required for this service."
-	for _, sec := range []string{kRequired, kOptional} {
-		msg += fmt.Sprintf("\n### %s", sec)
-		for _, k := range sc.ConfigMap[sec].([]any) {
-			key := sc.getEnvKey(k.(string))
-			val := os.Getenv(key)
-			msg += fmt.Sprintf("\n%s=%q", key, val)
-		}
+	for _, k := range sc.ConfigMap[kRequired].([]any) {
+		key := sc.getEnvKey(k.(string))
+		val := os.Getenv(key)
+		msg += fmt.Sprintf("\n%s=%q", key, val)
 	}
 	return msg
 }

@@ -73,7 +73,7 @@ func initEnv() error {
 	err := godotenv.Load(args...)
 
 	if envfile != "" && err != nil {
-		return fmt.Errorf("error loading .env file (%s): %w", envfile, err)
+		return fmt.Errorf("error loading env file (%s): %w", envfile, err)
 	}
 	return nil
 }

@@ -1,0 +1,25 @@
+You will be given a json formatted input containing entries with "id" and "text" fields. 
+For each entry in the json, translate the contents of the "text" field into "{{lang}}". 
+Write the translation back into the "text" field for that entry.
+
+Here is an example of the expected format:
+Input:
+[
+  {
+    "id": 0,
+    "text": "..."
+  }
+]
+
+Output:
+[
+  {
+    "id": 0,
+    "text": "..."
+  }
+]
+
+Here is the input:
+{{json}}
+
+Do not provide any explanations. Do not respond with anything except the output of the data.
