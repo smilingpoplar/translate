@@ -26,10 +26,8 @@ func getServicesConfig() map[string]any {
 
 const (
 	kRequired = "required"
-	kDefault  = "default"
 	kType     = "type"
 	kOpenAI   = "openai"
-	kModel    = "model"
 )
 
 type ServiceConfig struct {
@@ -41,13 +39,8 @@ type ServiceConfig struct {
 
 func NewServiceConfig(service string) *ServiceConfig {
 	sc := &ServiceConfig{}
-	// name, model
-	parts := strings.SplitN(service, ":", 2)
-	sc.Name = parts[0]
-	if len(parts) == 2 {
-		sc.Model = parts[1]
-	}
-
+	// name
+	sc.Name = service
 	serviceConfig, ok := servicesConfig[sc.Name]
 	if !ok { // 若不存在服务的配置项，就默认为OpenAI兼容格式
 		sc.setToOpenAICompatible()
@@ -62,7 +55,6 @@ func NewServiceConfig(service string) *ServiceConfig {
 
 	if configMap[kType] == kOpenAI { // OpenAI兼容类型
 		sc.setToOpenAICompatible()
-		sc.ConfigMap[kDefault] = configMap[kDefault]
 	} else {
 		sc.ConfigMap = configMap
 	}
@@ -72,24 +64,10 @@ func NewServiceConfig(service string) *ServiceConfig {
 func (sc *ServiceConfig) setToOpenAICompatible() {
 	sc.Type = kOpenAI
 	configOpenAI := servicesConfig[kOpenAI].(map[string]any)
-	configOpenAI[kDefault] = make(map[string]any)
 	sc.ConfigMap = configOpenAI
 }
 
 func (sc *ServiceConfig) ValidateEnvArgs() error {
-	if sc.Model != "" {
-		os.Setenv(sc.getEnvKey(kModel), sc.Model)
-	}
-	defaultSettings := sc.ConfigMap[kDefault].(map[string]any)
-	for k, v := range defaultSettings {
-		if v != nil {
-			key := sc.getEnvKey(k)
-			if val := os.Getenv(key); val == "" {
-				os.Setenv(key, v.(string))
-			}
-		}
-	}
-
 	for _, k := range sc.ConfigMap[kRequired].([]any) {
 		if sc.GetEnvValue(k.(string)) == "" {
 			return fmt.Errorf("%s", sc.getEnvArgsInfo())
@@ -100,12 +78,19 @@ func (sc *ServiceConfig) ValidateEnvArgs() error {
 }
 
 func (sc *ServiceConfig) getEnvArgsInfo() string {
-	msg := "Please set the environment variables required for this service."
+	msg := "# Option 1: Set in a .env file (recommended)"
 	for _, k := range sc.ConfigMap[kRequired].([]any) {
 		key := sc.getEnvKey(k.(string))
 		val := os.Getenv(key)
 		msg += fmt.Sprintf("\n%s=%q", key, val)
 	}
+	msg += "\n\n# Option 2: Export directly in your shell"
+	for _, k := range sc.ConfigMap[kRequired].([]any) {
+		key := sc.getEnvKey(k.(string))
+		val := os.Getenv(key)
+		msg += fmt.Sprintf("\nexport %s=%q", key, val)
+	}
+
 	return msg
 }
 
@@ -121,26 +106,10 @@ func (sc *ServiceConfig) GetEnvValue(key string) string {
 	return os.Getenv(k)
 }
 
-func GetAllServiceStrs() []string {
+func GetAllServiceNames() []string {
 	var names []string
 	for service := range servicesConfig {
-		defaultModel := getDefaultModel(service)
-		if defaultModel != "" {
-			service = fmt.Sprintf("%s:%s", service, defaultModel)
-		}
 		names = append(names, service)
 	}
 	return names
-}
-
-func getDefaultModel(service string) string {
-	configMap, ok := servicesConfig[service].(map[string]any)
-	if !ok {
-		return ""
-	}
-	defaultSettings, ok := configMap[kDefault].(map[string]any)
-	if !ok {
-		return ""
-	}
-	return defaultSettings[kModel].(string)
 }

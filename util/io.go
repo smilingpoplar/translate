@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
@@ -46,4 +47,35 @@ func ReplaceWithDict(texts []string, dict map[string]string) []string {
 		result[i] = text
 	}
 	return result
+}
+
+func FileExistsInParentDirs(name string) (string, error) {
+	if filepath.IsAbs(name) || strings.Contains(name, string(filepath.Separator)) {
+		if info, err := os.Stat(name); err == nil && !info.IsDir() {
+			abs, _ := filepath.Abs(name)
+			return abs, nil
+		}
+		abs, _ := filepath.Abs(name)
+		return "", fmt.Errorf("no file: %s", abs)
+	}
+
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("error getcwd: %w", err)
+	}
+
+	for {
+		filePath := filepath.Join(currentDir, name)
+		if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+			return filePath, nil
+		}
+
+		parent := filepath.Dir(currentDir)
+		if parent == currentDir {
+			break
+		}
+		currentDir = parent
+	}
+
+	return "", fmt.Errorf("no file even search upwards: %s", name)
 }

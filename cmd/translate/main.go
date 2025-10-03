@@ -16,9 +16,7 @@ import (
 
 const (
 	kService = "service"
-	kGoogle  = "google"
 	kTolang  = "tolang"
-	kLangCN  = "zh-CN"
 	kEnvFile = "envfile"
 	kProxy   = "proxy"
 	KFixFile = "fixfile"
@@ -55,10 +53,10 @@ func initCmd() *cobra.Command {
 		},
 	}
 
-	services := fmt.Sprintf("translate service, eg. %s", strings.Join(config.GetAllServiceStrs(), ", "))
-	cmd.Flags().StringVarP(&service, kService, "s", kGoogle, services)
-	cmd.Flags().StringVarP(&tolang, kTolang, "t", kLangCN, "target language")
-	cmd.Flags().StringVarP(&envfile, kEnvFile, "e", "", "env file")
+	services := fmt.Sprintf("translate service, eg. %s", strings.Join(config.GetAllServiceNames(), ", "))
+	cmd.Flags().StringVarP(&service, kService, "s", "google", services)
+	cmd.Flags().StringVarP(&tolang, kTolang, "t", "zh-CN", "target language")
+	cmd.Flags().StringVarP(&envfile, kEnvFile, "e", "", "env file, search .env upwards if not set")
 	cmd.Flags().StringVarP(&proxy, kProxy, "p", "", "http or socks5 proxy,\n eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890")
 	cmd.Flags().StringVarP(&fixfile, KFixFile, "f", "", "csv file to fix translation")
 
@@ -66,14 +64,23 @@ func initCmd() *cobra.Command {
 }
 
 func initEnv() error {
-	args := []string{}
-	if envfile != "" {
-		args = append(args, envfile)
+	filename := envfile
+	if filename == "" {
+		filename = ".env"
 	}
-	err := godotenv.Load(args...)
 
-	if envfile != "" && err != nil {
-		return fmt.Errorf("error loading env file (%s): %w", envfile, err)
+	path, err := util.FileExistsInParentDirs(filename)
+	if err != nil { // 文件不存在
+		if envfile != "" {
+			return fmt.Errorf("error envfile: %w", err)
+		}
+		return nil
+	}
+
+	if err := godotenv.Load(path); err != nil {
+		if envfile != "" {
+			return fmt.Errorf("error loading envfile: %w", err)
+		}
 	}
 	return nil
 }
