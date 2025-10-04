@@ -45,19 +45,3 @@ func getJson(texts []string) (string, error) {
 	}
 	return string(jsonData), nil
 }
-
-func ParseResponse(str string) ([]string, error) {
-	trans := []Translation{}
-	if err := json.Unmarshal([]byte(str), &trans); err != nil {
-		return nil, fmt.Errorf("error parsing response: %w, response str: %s", err, str)
-	}
-
-	arr := make([]string, len(trans))
-	for _, t := range trans {
-		if t.ID >= len(arr) {
-			return nil, fmt.Errorf("invalid id in response json: %d", t.ID)
-		}
-		arr[t.ID] = t.Text
-	}
-	return arr, nil
-}

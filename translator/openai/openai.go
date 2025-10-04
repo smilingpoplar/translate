@@ -2,18 +2,14 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
 
 	oai "github.com/sashabaranov/go-openai"
 	"github.com/smilingpoplar/translate/config"
 	"github.com/smilingpoplar/translate/translator/middleware"
+	"github.com/smilingpoplar/translate/translator/transerrors"
 	"github.com/smilingpoplar/translate/util"
-)
-
-const (
-	BaseURL      = "https://api.openai.com/v1"
-	DefaultModel = oai.GPT3Dot5Turbo
 )
 
 type OpenAI struct {
@@ -23,20 +19,22 @@ type OpenAI struct {
 	prompt  string
 	handler middleware.Handler
 	onTrans func([]string) error
+	Name    string
 }
 
 type option func(*OpenAI) error
 
-func New(key string, opts ...option) (*OpenAI, error) {
-	o := &OpenAI{}
+func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
+	o := &OpenAI{Name: name, model: model}
 	chain := middleware.Chain(
-		middleware.TextsLimit(5000),
+		middleware.TextsLimit(2000),
 		middleware.OnTranslated(&o.onTrans),
-		middleware.Retry(5, 3),
+		middleware.RetryWithCache(name, 3, 8),
 	)
 	o.handler = chain(o.translate)
 
 	config := oai.DefaultConfig(key)
+	config.BaseURL = baseURL
 	o.config = &config
 	for _, opt := range opts {
 		if err := opt(o); err != nil {
@@ -46,38 +44,6 @@ func New(key string, opts ...option) (*OpenAI, error) {
 	o.client = oai.NewClientWithConfig(config)
 
 	return o, nil
-}
-
-func WithBaseURL(baseURL string) option {
-	return func(o *OpenAI) error {
-		if baseURL == "" {
-			baseURL = BaseURL
-		} else {
-			if strings.LastIndex(baseURL, "/v") == -1 {
-				idx := strings.LastIndex(BaseURL, "/v")
-				baseURL += BaseURL[idx:]
-			}
-		}
-		o.config.BaseURL = baseURL
-		return nil
-	}
-}
-
-func WithModel(model string) option {
-	return func(o *OpenAI) error {
-		if model == "" {
-			model = DefaultModel
-		}
-		o.model = model
-		return nil
-	}
-}
-
-func WithPrompt(prompt string) option {
-	return func(o *OpenAI) error {
-		o.prompt = prompt
-		return nil
-	}
 }
 
 func WithProxy(proxy string) option {
@@ -111,7 +77,7 @@ func (o *OpenAI) translate(texts []string, toLang string) ([]string, error) {
 	}
 
 	result := resp.Choices[0].Message.Content
-	parsed, err := config.ParseResponse(result)
+	parsed, err := ParseResponse(result, len(texts))
 	if err != nil {
 		return nil, fmt.Errorf("error translating: %w", err)
 	}
@@ -124,4 +90,30 @@ func (o *OpenAI) Translate(texts []string, toLang string) ([]string, error) {
 
 func (o *OpenAI) OnTranslated(f func([]string) error) {
 	o.onTrans = f
+}
+
+type Translation struct {
+	ID   int    `json:"id"`
+	Text string `json:"text"`
+}
+
+func ParseResponse(str string, expectedCount int) ([]string, error) {
+	trans := []Translation{}
+	if err := json.Unmarshal([]byte(str), &trans); err != nil {
+		return nil, fmt.Errorf("error parsing response: %w, response str: %s", transerrors.ErrInvalidJSON, str)
+	}
+
+	// 验证返回的段数是否与期望的段数匹配
+	if len(trans) != expectedCount {
+		return nil, fmt.Errorf("error parsing response: %w, expected %d, got %d", transerrors.ErrCountMismatch, expectedCount, len(trans))
+	}
+
+	arr := make([]string, len(trans))
+	for _, t := range trans {
+		if t.ID >= len(arr) {
+			return nil, fmt.Errorf("error parsing response: %w, invalid id %d", transerrors.ErrInvalidJSON, t.ID)
+		}
+		arr[t.ID] = t.Text
+	}
+	return arr, nil
 }

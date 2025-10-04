@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/smilingpoplar/translate/translator/middleware"
+	"github.com/smilingpoplar/translate/translator/transerrors"
 	"github.com/smilingpoplar/translate/util"
 )
 
@@ -95,7 +96,7 @@ func (g *Google) translate(texts []string, toLang string) ([]string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return nil, middleware.ErrTooManyRequests
+			return nil, transerrors.ErrTooManyRequests
 		}
 		return nil, fmt.Errorf("error http status: %s", http.StatusText(resp.StatusCode))
 	}
