@@ -151,6 +151,7 @@ func translateInTerminal(trans translator.Translator, fixes []util.FixTransform)
 	return scanner.Err()
 }
 
+
 func OnTranslated(writer io.Writer, result []string, fixes []util.FixTransform) error {
 	util.ApplyTranslationFixes(result, fixes)
 	return util.WriteLines(writer, result)

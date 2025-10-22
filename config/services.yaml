@@ -1,3 +1,12 @@
 google: ''
 openai:
   required: ["base-url", "api-key", "model"]
+glm:
+  type: openai
+  req-args:
+    thinking:
+      type: disabled
+siliconflow:
+  type: openai
+  req-args:
+    enable_thinking: false

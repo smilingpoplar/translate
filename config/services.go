@@ -55,8 +55,9 @@ func NewServiceConfig(service string) *ServiceConfig {
 
 	if configMap[kType] == kOpenAI { // OpenAI兼容类型
 		sc.setToOpenAICompatible()
-	} else {
-		sc.ConfigMap = configMap
+	}
+	for k, v := range configMap { // 自身的配置
+		sc.ConfigMap[k] = v
 	}
 	return sc
 }
@@ -104,6 +105,13 @@ func (sc *ServiceConfig) getEnvKey(key string) string {
 func (sc *ServiceConfig) GetEnvValue(key string) string {
 	k := sc.getEnvKey(key)
 	return os.Getenv(k)
+}
+
+func (sc *ServiceConfig) GetReqArgs() map[string]any {
+	if req, ok := sc.ConfigMap["req-args"].(map[string]any); ok {
+		return req
+	}
+	return nil
 }
 
 func GetAllServiceNames() []string {
