@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	oai "github.com/sashabaranov/go-openai"
 	"github.com/smilingpoplar/translate/config"
@@ -48,7 +49,7 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 
 func WithProxy(proxy string) option {
 	return func(o *OpenAI) error {
-		return util.SetProxy(proxy, o.config.HTTPClient)
+		return util.SetProxy(proxy, o.config.HTTPClient.(*http.Client))
 	}
 }
 
