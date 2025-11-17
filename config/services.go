@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -108,6 +109,19 @@ func (sc *ServiceConfig) GetEnvValue(key string) string {
 }
 
 func (sc *ServiceConfig) GetReqArgs() map[string]any {
+	// 优先检查环境变量，环境变量以json串配置，如 XXX_REQ_ARGS='{"enable_thinking": false}'
+	reqArgsStr := sc.GetEnvValue("req-args")
+	if reqArgsStr != "" {
+		var reqArgs map[string]any
+		var err error
+		if err = json.Unmarshal([]byte(reqArgsStr), &reqArgs); err == nil {
+			return reqArgs
+		}
+		// 如果环境变量解析失败，记录日志但继续使用配置文件
+		log.Printf("Warning: failed to parse req-args from environment variable for %s: %v", sc.Name, err)
+	}
+
+	// 如果环境变量不存在或解析失败，使用配置文件中的配置
 	if req, ok := sc.ConfigMap["req-args"].(map[string]any); ok {
 		return req
 	}
