@@ -15,8 +15,8 @@ import (
 const (
 	// MaxCacheEntries 最大缓存条目数
 	MaxCacheEntries = 5000
-	// CacheExpiration 缓存过期时间（2小时）
-	CacheExpiration = 2 * time.Hour
+	// CacheExpiration 缓存过期时间（20分钟）
+	CacheExpiration = 20 * time.Minute
 )
 
 // cacheEntry 缓存条目
