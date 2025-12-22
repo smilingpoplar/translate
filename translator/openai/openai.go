@@ -88,6 +88,11 @@ func (o *OpenAI) translate(texts []string, toLang string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error translating: %w", err)
 	}
+	for i := range texts {
+		if texts[i] == parsed[i] && len(texts[i]) > 20 {
+			return nil, transerrors.ErrNoTranslation
+		}
+	}
 	return parsed, nil
 }
 

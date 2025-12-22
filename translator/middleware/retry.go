@@ -110,5 +110,9 @@ func isRetryable(err error) bool {
 	if errors.Is(err, transerrors.ErrCountMismatch) {
 		return true
 	}
+	// 没有翻译（原样返回）
+	if errors.Is(err, transerrors.ErrNoTranslation) {
+		return true
+	}
 	return false
 }
