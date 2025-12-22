@@ -33,9 +33,9 @@ type option func(*OpenAI) error
 func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 	o := &OpenAI{Name: name, model: model}
 	chain := middleware.Chain(
-		middleware.Concurrent(5),
 		middleware.TextsLimit(3000),
 		middleware.OnTranslated(&o.onTrans),
+		middleware.Concurrent(5),
 		middleware.RetryWithCache(name, 3, 8),
 	)
 	o.handler = chain(o.translate)
