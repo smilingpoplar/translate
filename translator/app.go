@@ -33,6 +33,7 @@ func getTranslatorOpenAI(sc *config.ServiceConfig, proxy string, fixes map[strin
 		sc.GetEnvValue("api-key"),
 		sc.GetEnvValue("base-url"),
 		sc.GetEnvValue("model"),
+		openai.WithRpm(sc.GetRpm()),
 		openai.WithReqArgs(sc.GetReqArgs()),
 		openai.WithProxy(proxy),
 		openai.WithFixes(fixes),

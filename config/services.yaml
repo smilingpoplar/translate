@@ -1,6 +1,7 @@
 google: ''
 openai:
   required: ["base-url", "api-key", "model"]
+  rpm: 60
 glm:
   type: openai
   req-args:
@@ -8,5 +9,6 @@ glm:
       type: disabled
 siliconflow:
   type: openai
+  rpm: 300
   req-args:
     enable_thinking: false

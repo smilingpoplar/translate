@@ -7,7 +7,8 @@ import (
 )
 
 func RateLimit(rpm int) Middleware {
-	limiter := rate.NewLimiter(rate.Limit(rpm)/60, 6)
+	burst := max(rpm / 30, 10)
+	limiter := rate.NewLimiter(rate.Limit(rpm)/60, burst)
 
 	return func(next Handler) Handler {
 		return func(texts []string, toLang string) ([]string, error) {

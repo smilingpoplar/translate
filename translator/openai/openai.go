@@ -24,6 +24,7 @@ type OpenAI struct {
 	fixes   map[string]string
 	onTrans func([]string) error
 	Name    string
+	rpm     int
 	reqArgs map[string]any
 	// apiKey is stored only for GLM thinking requests since OpenAI library doesn't support this parameter
 	apiKey string
@@ -33,26 +34,27 @@ type option func(*OpenAI) error
 
 func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 	o := &OpenAI{Name: name, model: model}
-	chain := middleware.Chain(
-		middleware.TextsLimit(3000),
-		middleware.OnTranslated(&o.onTrans),
-		middleware.TranslationFix(o.fixes),
-		middleware.RetryWithCache(name, 3, 8),
-		middleware.RateLimit(60),
-	)
-	o.handler = chain(o.translate)
-
 	config := oai.DefaultConfig(key)
 	config.BaseURL = baseURL
 	o.config = &config
+	o.client = oai.NewClientWithConfig(config)
 	// Store API key for GLM custom requests only when needed
 	o.apiKey = key
+
 	for _, opt := range opts {
 		if err := opt(o); err != nil {
 			return nil, fmt.Errorf("error creating openai translator: %w", err)
 		}
 	}
-	o.client = oai.NewClientWithConfig(config)
+
+	chain := middleware.Chain(
+		middleware.TextsLimit(3000),
+		middleware.OnTranslated(&o.onTrans),
+		middleware.TranslationFix(o.fixes),
+		middleware.RetryWithCache(name, 3, 8),
+		middleware.RateLimit(o.rpm),
+	)
+	o.handler = chain(o.translate)
 
 	return o, nil
 }
@@ -66,6 +68,13 @@ func WithProxy(proxy string) option {
 func WithFixes(fixes map[string]string) option {
 	return func(o *OpenAI) error {
 		o.fixes = fixes
+		return nil
+	}
+}
+
+func WithRpm(rpm int) option {
+	return func(o *OpenAI) error {
+		o.rpm = rpm
 		return nil
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"os"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -44,6 +46,7 @@ func NewServiceConfig(service string) *ServiceConfig {
 	sc.Name = service
 	serviceConfig, ok := servicesConfig[sc.Name]
 	if !ok { // 若不存在服务的配置项，就默认为OpenAI兼容格式
+		sc.ConfigMap = make(map[string]any)
 		sc.setToOpenAICompatible()
 		return sc
 	}
@@ -54,19 +57,18 @@ func NewServiceConfig(service string) *ServiceConfig {
 		return sc
 	}
 
+	sc.ConfigMap = make(map[string]any)
 	if configMap[kType] == kOpenAI { // OpenAI兼容类型
 		sc.setToOpenAICompatible()
 	}
-	for k, v := range configMap { // 自身的配置
-		sc.ConfigMap[k] = v
-	}
+	maps.Copy(sc.ConfigMap, configMap) // 自身的配置
 	return sc
 }
 
 func (sc *ServiceConfig) setToOpenAICompatible() {
 	sc.Type = kOpenAI
 	configOpenAI := servicesConfig[kOpenAI].(map[string]any)
-	sc.ConfigMap = configOpenAI
+	maps.Copy(sc.ConfigMap, configOpenAI)
 }
 
 func (sc *ServiceConfig) ValidateEnvArgs() error {
@@ -110,15 +112,13 @@ func (sc *ServiceConfig) GetEnvValue(key string) string {
 
 func (sc *ServiceConfig) GetReqArgs() map[string]any {
 	// 优先检查环境变量，环境变量以json串配置，如 XXX_REQ_ARGS='{"enable_thinking": false}'
-	reqArgsStr := sc.GetEnvValue("req-args")
-	if reqArgsStr != "" {
+	if reqArgsStr := sc.GetEnvValue("req-args"); reqArgsStr != "" {
 		var reqArgs map[string]any
-		var err error
-		if err = json.Unmarshal([]byte(reqArgsStr), &reqArgs); err == nil {
+		if err := json.Unmarshal([]byte(reqArgsStr), &reqArgs); err == nil {
 			return reqArgs
+		} else {
+			log.Printf("Warning: failed to parse req-args from environment variable for %s: %v", sc.Name, err)
 		}
-		// 如果环境变量解析失败，记录日志但继续使用配置文件
-		log.Printf("Warning: failed to parse req-args from environment variable for %s: %v", sc.Name, err)
 	}
 
 	// 如果环境变量不存在或解析失败，使用配置文件中的配置
@@ -126,6 +126,22 @@ func (sc *ServiceConfig) GetReqArgs() map[string]any {
 		return req
 	}
 	return nil
+}
+
+func (sc *ServiceConfig) GetRpm() int {
+	if rpmStr := sc.GetEnvValue("rpm"); rpmStr != "" {
+		if rpm, err := strconv.Atoi(rpmStr); err == nil {
+			return rpm
+		} else {
+			log.Printf("Warning: failed to parse rpm from environment variable for %s: %v", sc.Name, err)
+		}
+	}
+
+	// 如果环境变量不存在或解析失败，使用配置文件中的配置
+	if rpm, ok := sc.ConfigMap["rpm"].(int); ok {
+		return rpm
+	}
+	return 60
 }
 
 func GetAllServiceNames() []string {
