@@ -86,20 +86,19 @@ func initEnv() error {
 }
 
 func translate(args []string) error {
-	var trans translator.Translator
-	var err error
-	if trans, err = translator.GetTranslator(service, proxy); err != nil {
+	fixes, err := util.LoadFixes(fixfile)
+	if err != nil {
 		return err
 	}
-	var fixes []util.FixTransform
-	if fixes, err = util.LoadTranslationFixes(fixfile); err != nil {
+	trans, err := translator.GetTranslator(service, proxy, fixes)
+	if err != nil {
 		return err
 	}
 
 	var reader io.Reader = os.Stdin
 	if len(args) == 0 { // 从os.Stdin读取要翻译的文本
 		if util.IsTerminal() {
-			return translateInTerminal(trans, fixes)
+			return translateInTerminal(trans)
 		}
 	} else { // 翻译命令行参数
 		reader = strings.NewReader(strings.Join(args, "\n"))
@@ -108,19 +107,20 @@ func translate(args []string) error {
 
 	o, ok := trans.(translator.TranslationObserver)
 	if ok { // 收到分组响应后立即输出
-		o.OnTranslated(func(result []string) error {
-			return OnTranslated(writer, result, fixes)
+		o.OnTranslated(func(translated []string) error {
+			return util.WriteLines(writer, translated)
 		})
 	}
-	var texts, result []string
-	if texts, err = util.ReadLines(reader); err != nil {
+	texts, err := util.ReadLines(reader)
+	if err != nil {
 		return err
 	}
-	if result, err = trans.Translate(texts, tolang); err != nil {
+	result, err := trans.Translate(texts, tolang)
+	if err != nil {
 		return err
 	}
 	if !ok { // 收到全部响应后再输出
-		if err = OnTranslated(writer, result, fixes); err != nil {
+		if err = util.WriteLines(writer, result); err != nil {
 			return err
 		}
 	}
@@ -131,7 +131,7 @@ func translate(args []string) error {
 	return nil
 }
 
-func translateInTerminal(trans translator.Translator, fixes []util.FixTransform) error {
+func translateInTerminal(trans translator.Translator) error {
 	fmt.Println("Input texts to be translated... <Ctrl-D> to finish.")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -143,16 +143,9 @@ func translateInTerminal(trans translator.Translator, fixes []util.FixTransform)
 		if err != nil {
 			return err
 		}
-		util.ApplyTranslationFixes(result, fixes)
 		fmt.Fprintln(os.Stdout, result[0])
 	}
 	// 手动保存缓存
 	util.SaveCache()
 	return scanner.Err()
-}
-
-
-func OnTranslated(writer io.Writer, result []string, fixes []util.FixTransform) error {
-	util.ApplyTranslationFixes(result, fixes)
-	return util.WriteLines(writer, result)
 }

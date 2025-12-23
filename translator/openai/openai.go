@@ -21,6 +21,7 @@ type OpenAI struct {
 	model   string
 	prompt  string
 	handler middleware.Handler
+	fixes   map[string]string
 	onTrans func([]string) error
 	Name    string
 	reqArgs map[string]any
@@ -35,6 +36,7 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 	chain := middleware.Chain(
 		middleware.TextsLimit(3000),
 		middleware.OnTranslated(&o.onTrans),
+		middleware.TranslationFix(o.fixes),
 		middleware.Concurrent(5),
 		middleware.RetryWithCache(name, 3, 8),
 	)
@@ -58,6 +60,13 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 func WithProxy(proxy string) option {
 	return func(o *OpenAI) error {
 		return util.SetProxy(proxy, o.config.HTTPClient.(*http.Client))
+	}
+}
+
+func WithFixes(fixes map[string]string) option {
+	return func(o *OpenAI) error {
+		o.fixes = fixes
+		return nil
 	}
 }
 
