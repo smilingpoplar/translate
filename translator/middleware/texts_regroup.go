@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"sync"
 )
 
 func TextsRegroup(maxLen int) Middleware {
@@ -12,15 +13,29 @@ func TextsRegroup(maxLen int) Middleware {
 				return nil, fmt.Errorf("error group texts: %w", err)
 			}
 
-			var result []string
-			for _, group := range groups {
-				part, err := handler(group, toLang)
+			results := make([][]string, len(groups))
+			errs := make([]error, len(groups))
+			var wg sync.WaitGroup
+			for i, group := range groups {
+				wg.Add(1)
+				go func(index int, g []string) {
+					defer wg.Done()
+					results[index], errs[index] = handler(g, toLang)
+				}(i, group)
+			}
+			wg.Wait()
+
+			for _, err := range errs {
 				if err != nil {
 					return nil, err
 				}
-				result = append(result, part...)
 			}
-			return result, nil
+
+			var finalResult []string
+			for _, res := range results {
+				finalResult = append(finalResult, res...)
+			}
+			return finalResult, nil
 		}
 	}
 }

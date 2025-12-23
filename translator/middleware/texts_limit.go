@@ -8,6 +8,7 @@ import (
 func TextsLimit(maxLen int) Middleware {
 	return func(handler Handler) Handler {
 		handler = TextsRegroup(maxLen)(handler)
+
 		return func(texts []string, toLang string) ([]string, error) {
 			texts, info, err := splitLongTexts(texts, maxLen)
 			if err != nil {

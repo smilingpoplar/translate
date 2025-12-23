@@ -37,7 +37,6 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 		middleware.TextsLimit(3000),
 		middleware.OnTranslated(&o.onTrans),
 		middleware.TranslationFix(o.fixes),
-		middleware.Concurrent(10),
 		middleware.RetryWithCache(name, 3, 8),
 		middleware.RateLimit(60),
 	)
