@@ -76,7 +76,7 @@ func TestGetRpm(t *testing.T) {
 	}
 }
 
-func TestGetReqArgs(t *testing.T) {
+func TestGetRequestArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		service  string
@@ -84,22 +84,22 @@ func TestGetReqArgs(t *testing.T) {
 		wantKeys []string
 	}{
 		{
-			name:     "openai no req-args",
+			name:     "openai no request-args",
 			service:  "openai",
 			wantKeys: []string{},
 		},
 		{
-			name:     "glm has req-args",
+			name:     "glm has request-args",
 			service:  "glm",
 			wantKeys: []string{"thinking"},
 		},
 		{
-			name:     "siliconflow has req-args",
+			name:     "siliconflow has request-args",
 			service:  "siliconflow",
 			wantKeys: []string{"enable_thinking"},
 		},
 		{
-			name:     "env override req-args",
+			name:     "env override request-args",
 			service:  "openai",
 			envArgs:  `{"temperature": 0.5, "top_p": 0.9}`,
 			wantKeys: []string{"temperature", "top_p"},
@@ -114,7 +114,7 @@ func TestGetReqArgs(t *testing.T) {
 			svc := NewServiceConfig(tt.service)
 
 			if tt.envArgs != "" {
-				envKey := svc.envKey("req-args")
+				envKey := svc.envKey("request-args")
 				original := os.Getenv(envKey)
 				t.Cleanup(func() {
 					if original == "" {
@@ -125,15 +125,15 @@ func TestGetReqArgs(t *testing.T) {
 				})
 				os.Setenv(envKey, tt.envArgs)
 			}
-			got := svc.GetReqArgs()
+			got := svc.GetRequestArgs()
 
 			if len(got) != len(tt.wantKeys) {
-				t.Errorf("GetReqArgs() keys = %v, want %v", keysOf(got), tt.wantKeys)
+				t.Errorf("GetRequestArgs() keys = %v, want %v", keysOf(got), tt.wantKeys)
 			}
 
 			for _, key := range tt.wantKeys {
 				if _, ok := got[key]; !ok {
-					t.Errorf("GetReqArgs() missing key: %s", key)
+					t.Errorf("GetRequestArgs() missing key: %s", key)
 				}
 			}
 		})

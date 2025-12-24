@@ -9,15 +9,6 @@ import (
 	"strings"
 )
 
-const (
-	kOpenAI         = "openai"
-	kRpm            = "rpm"
-	kReqArgs        = "req-args"
-	kRequired       = "required"
-	kType           = "type"
-	kMaxConcurrency = "max-concurrency"
-)
-
 /* =========================
    Runtime ServiceConfig
    ========================= */
@@ -118,19 +109,19 @@ func (svc *ServiceConfig) getEnvArgsInfo() string {
 /* =========================
    Runtime getters
    ========================= */
-
-func (svc *ServiceConfig) GetReqArgs() map[string]any {
-	if s := svc.getEnvValue(kReqArgs); s != "" {
+// 环境变量配置JSON串 => map
+func (svc *ServiceConfig) GetRequestArgs() map[string]any {
+	if s := svc.getEnvValue(kRequestArgs); s != "" {
 		var v map[string]any
 		if err := json.Unmarshal([]byte(s), &v); err == nil {
 			return v
 		} else {
-			log.Printf("Warning: failed to parse req-args for %s: %v", svc.Name, err)
+			log.Printf("Warning: failed to parse request-args for %s: %v", svc.Name, err)
 		}
 	}
 
 	if svc.YAML != nil {
-		return svc.YAML.ReqArgs
+		return svc.YAML.RequestArgs
 	}
 	return nil
 }

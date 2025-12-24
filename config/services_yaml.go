@@ -7,6 +7,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	kRequired       = "required"
+	kType           = "type"
+	kOpenAI         = "openai"
+	kRequestArgs    = "request-args"
+	kRpm            = "rpm"
+	kMaxConcurrency = "max-concurrency"
+)
+
 /* =========================
    YAML structs
    ========================= */
@@ -16,7 +25,7 @@ type ServiceYAML struct {
 	Type           string         `yaml:"type"`
 	Rpm            int            `yaml:"rpm"`
 	MaxConcurrency int            `yaml:"max-concurrency"`
-	ReqArgs        map[string]any `yaml:"req-args"`
+	RequestArgs    map[string]any `yaml:"request-args"`
 }
 
 type ServicesYAML map[string]*ServiceYAML
@@ -68,8 +77,8 @@ func parseServiceYAML(m map[string]any) *ServiceYAML {
 	if v, ok := m[kMaxConcurrency].(int); ok {
 		svc.MaxConcurrency = v
 	}
-	if v, ok := m[kReqArgs].(map[string]any); ok {
-		svc.ReqArgs = v
+	if v, ok := m[kRequestArgs].(map[string]any); ok {
+		svc.RequestArgs = v
 	}
 	return svc
 }
@@ -86,9 +95,9 @@ func (svc *ServiceYAML) copy() *ServiceYAML {
 		Required:       append([]string(nil), svc.Required...),
 	}
 
-	if svc.ReqArgs != nil {
-		c.ReqArgs = make(map[string]any, len(svc.ReqArgs))
-		maps.Copy(c.ReqArgs, svc.ReqArgs)
+	if svc.RequestArgs != nil {
+		c.RequestArgs = make(map[string]any, len(svc.RequestArgs))
+		maps.Copy(c.RequestArgs, svc.RequestArgs)
 	}
 
 	return c
@@ -115,8 +124,8 @@ func merge(base, override *ServiceYAML) *ServiceYAML {
 	if len(override.Required) > 0 {
 		merged.Required = append([]string(nil), override.Required...)
 	}
-	if override.ReqArgs != nil {
-		merged.ReqArgs = maps.Clone(override.ReqArgs)
+	if override.RequestArgs != nil {
+		merged.RequestArgs = maps.Clone(override.RequestArgs)
 	}
 	return merged
 }
