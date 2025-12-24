@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 
 	oai "github.com/sashabaranov/go-openai"
@@ -26,8 +27,7 @@ type OpenAI struct {
 	Name    string
 	rpm     int
 	reqArgs map[string]any
-	// apiKey is stored only for GLM thinking requests since OpenAI library doesn't support this parameter
-	apiKey string
+	apiKey  string
 }
 
 type option func(*OpenAI) error
@@ -38,7 +38,6 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 	config.BaseURL = baseURL
 	o.config = &config
 	o.client = oai.NewClientWithConfig(config)
-	// Store API key for GLM custom requests only when needed
 	o.apiKey = key
 
 	for _, opt := range opts {
@@ -48,7 +47,7 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 	}
 
 	chain := middleware.Chain(
-		middleware.TextsLimit(3000),
+		middleware.TextsLimit(2000),
 		middleware.OnTranslated(&o.onTrans),
 		middleware.TranslationFix(o.fixes),
 		middleware.RetryWithCache(name, 3, 8),
@@ -146,9 +145,7 @@ func (o *OpenAI) buildRequest(prompt string) (*http.Request, error) {
 	}
 
 	// Merge all req configuration into request
-	for key, value := range o.reqArgs {
-		reqMap[key] = value
-	}
+	maps.Copy(reqMap, o.reqArgs)
 
 	// Marshal final request
 	jsonBody, err := json.Marshal(reqMap)

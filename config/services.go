@@ -12,142 +12,270 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var servicesConfig = getServicesConfig()
-
-func getServicesConfig() map[string]any {
-	data, err := embedFS.ReadFile("services.yaml")
-	if err != nil {
-		log.Fatalf("error reading YAML file: %v", err)
-	}
-
-	var config map[string]any
-	if err = yaml.Unmarshal(data, &config); err != nil {
-		log.Fatalf("error unmarshalling YAML: %v", err)
-	}
-	return config
-}
-
 const (
+	kOpenAI   = "openai"
+	kRpm      = "rpm"
+	kReqArgs  = "req-args"
 	kRequired = "required"
 	kType     = "type"
-	kOpenAI   = "openai"
 )
 
+/* =========================
+   YAML structs
+   ========================= */
+
+type ServiceYAML struct {
+	Required []string       `yaml:"required"`
+	Type     string         `yaml:"type"`
+	Rpm      int            `yaml:"rpm"`
+	ReqArgs  map[string]any `yaml:"req-args"`
+}
+
+type ServicesYAML map[string]*ServiceYAML
+
+var servicesYAML = loadServicesYAML()
+
+func loadServicesYAML() ServicesYAML {
+	data, err := embedFS.ReadFile("services.yaml")
+	if err != nil {
+		log.Fatalf("error reading services.yaml: %v", err)
+	}
+
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		log.Fatalf("error unmarshalling services.yaml: %v", err)
+	}
+
+	svcs := make(ServicesYAML, len(raw))
+	for name, v := range raw {
+		switch val := v.(type) {
+		case nil, string:
+			svcs[name] = nil
+		case map[string]any:
+			svcs[name] = parseServiceYAML(val)
+		default:
+			log.Fatalf("unexpected config for service %s: %T", name, v)
+		}
+	}
+
+	return svcs
+}
+
+func parseServiceYAML(m map[string]any) *ServiceYAML {
+	svc := &ServiceYAML{}
+	if arrOfAny, ok := m[kRequired].([]any); ok {
+		svc.Required = make([]string, 0, len(arrOfAny))
+		for _, a := range arrOfAny {
+			if s, ok := a.(string); ok {
+				svc.Required = append(svc.Required, s)
+			}
+		}
+	}
+	if v, ok := m[kType].(string); ok {
+		svc.Type = v
+	}
+	if v, ok := m[kRpm].(int); ok {
+		svc.Rpm = v
+	}
+	if v, ok := m[kReqArgs].(map[string]any); ok {
+		svc.ReqArgs = v
+	}
+	return svc
+}
+
+/* =========================
+   Runtime ServiceConfig
+   ========================= */
+
 type ServiceConfig struct {
-	Name      string
-	Model     string
-	ConfigMap map[string]any
-	Type      string
+	Name  string
+	Model string
+	Type  string
+	YAML  *ServiceYAML
 }
 
 func NewServiceConfig(service string) *ServiceConfig {
-	sc := &ServiceConfig{}
-	// name
-	sc.Name = service
-	serviceConfig, ok := servicesConfig[sc.Name]
-	if !ok { // 若不存在服务的配置项，就默认为OpenAI兼容格式
-		sc.ConfigMap = make(map[string]any)
-		sc.setToOpenAICompatible()
-		return sc
+	svc := &ServiceConfig{Name: service}
+
+	svcYAML, ok := servicesYAML[service]
+	if !ok {
+		// 若不存在服务的配置项，就默认为OpenAI兼容格式
+		svc.setToOpenAICompatible()
+		return svc
 	}
 
-	// service config map
-	configMap, ok := serviceConfig.(map[string]any)
-	if !ok { // 比如google服务，不需要configMap
-		return sc
+	if svcYAML == nil { // 比如google服务
+		return svc
 	}
 
-	sc.ConfigMap = make(map[string]any)
-	if configMap[kType] == kOpenAI { // OpenAI兼容类型
-		sc.setToOpenAICompatible()
+	// OpenAI兼容类型：先拷贝openai配置
+	if svcYAML.Type == kOpenAI {
+		svc.setToOpenAICompatible()
 	}
-	maps.Copy(sc.ConfigMap, configMap) // 自身的配置
-	return sc
+
+	// 自身的配置
+	svc.YAML = mergeConfig(svc.YAML, svcYAML)
+	return svc
 }
 
-func (sc *ServiceConfig) setToOpenAICompatible() {
-	sc.Type = kOpenAI
-	configOpenAI := servicesConfig[kOpenAI].(map[string]any)
-	maps.Copy(sc.ConfigMap, configOpenAI)
+/* =========================
+   Config helpers
+   ========================= */
+
+func copyConfig(svc *ServiceYAML) *ServiceYAML {
+	if svc == nil {
+		return nil
+	}
+
+	c := &ServiceYAML{
+		Type:     svc.Type,
+		Rpm:      svc.Rpm,
+		Required: append([]string(nil), svc.Required...),
+	}
+
+	if svc.ReqArgs != nil {
+		c.ReqArgs = make(map[string]any, len(svc.ReqArgs))
+		maps.Copy(c.ReqArgs, svc.ReqArgs)
+	}
+
+	return c
 }
 
-func (sc *ServiceConfig) ValidateEnvArgs() error {
-	for _, k := range sc.ConfigMap[kRequired].([]any) {
-		if sc.GetEnvValue(k.(string)) == "" {
-			return fmt.Errorf("%s", sc.getEnvArgsInfo())
+func mergeConfig(base, override *ServiceYAML) *ServiceYAML {
+	if base == nil {
+		return copyConfig(override)
+	}
+	if override == nil {
+		return copyConfig(base)
+	}
+
+	merged := copyConfig(base)
+
+	// 使用反射通用合并非零字段
+	if override.Type != "" {
+		merged.Type = override.Type
+	}
+	if override.Rpm > 0 {
+		merged.Rpm = override.Rpm
+	}
+	if len(override.Required) > 0 {
+		merged.Required = append([]string(nil), override.Required...)
+	}
+	if override.ReqArgs != nil {
+		if merged.ReqArgs == nil {
+			merged.ReqArgs = map[string]any{}
+		}
+		maps.Copy(merged.ReqArgs, override.ReqArgs)
+	}
+
+	return merged
+}
+
+func (svc *ServiceConfig) setToOpenAICompatible() {
+	svc.Type = kOpenAI
+	svc.YAML = copyConfig(servicesYAML[kOpenAI])
+}
+
+/* =========================
+   Env helpers
+   ========================= */
+
+func (svc *ServiceConfig) envKey(key string) string {
+	return strings.ToUpper(
+		strings.ReplaceAll(svc.Name+"_"+key, "-", "_"),
+	)
+}
+
+func (svc *ServiceConfig) getEnvValue(key string) string {
+	return os.Getenv(svc.envKey(key))
+}
+
+func (svc *ServiceConfig) GetEnvValue(key string) string {
+	return svc.getEnvValue(key)
+}
+
+/* =========================
+   Validation
+   ========================= */
+
+func (svc *ServiceConfig) ValidateEnvArgs() error {
+	if svc.YAML == nil || len(svc.YAML.Required) == 0 {
+		return nil
+	}
+
+	for _, key := range svc.YAML.Required {
+		if svc.getEnvValue(key) == "" {
+			return fmt.Errorf("%s", svc.getEnvArgsInfo())
 		}
 	}
-
 	return nil
 }
 
-func (sc *ServiceConfig) getEnvArgsInfo() string {
-	msg := "# Option 1: Set in a .env file (recommended)"
-	for _, k := range sc.ConfigMap[kRequired].([]any) {
-		key := sc.getEnvKey(k.(string))
-		val := os.Getenv(key)
-		msg += fmt.Sprintf("\n%s=%q", key, val)
-	}
-	msg += "\n\n# Option 2: Export directly in your shell"
-	for _, k := range sc.ConfigMap[kRequired].([]any) {
-		key := sc.getEnvKey(k.(string))
-		val := os.Getenv(key)
-		msg += fmt.Sprintf("\nexport %s=%q", key, val)
+func (svc *ServiceConfig) getEnvArgsInfo() string {
+	var lines []string
+
+	lines = append(lines, "# Option 1: Set in a .env file (recommended)")
+	if svc.YAML != nil {
+		for _, key := range svc.YAML.Required {
+			envKey := svc.envKey(key)
+			lines = append(lines, fmt.Sprintf("%s=%q", envKey, os.Getenv(envKey)))
+		}
 	}
 
-	return msg
+	lines = append(lines, "", "# Option 2: Export directly in your shell")
+	if svc.YAML != nil {
+		for _, key := range svc.YAML.Required {
+			envKey := svc.envKey(key)
+			lines = append(lines, fmt.Sprintf("export %s=%q", envKey, os.Getenv(envKey)))
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
-func (sc *ServiceConfig) getEnvKey(key string) string {
-	str := fmt.Sprintf("%s_%s", sc.Name, key)
-	str = strings.ReplaceAll(str, "-", "_")
-	str = strings.ToUpper(str)
-	return str
-}
+/* =========================
+   Runtime getters
+   ========================= */
 
-func (sc *ServiceConfig) GetEnvValue(key string) string {
-	k := sc.getEnvKey(key)
-	return os.Getenv(k)
-}
-
-func (sc *ServiceConfig) GetReqArgs() map[string]any {
-	// 优先检查环境变量，环境变量以json串配置，如 XXX_REQ_ARGS='{"enable_thinking": false}'
-	if reqArgsStr := sc.GetEnvValue("req-args"); reqArgsStr != "" {
-		var reqArgs map[string]any
-		if err := json.Unmarshal([]byte(reqArgsStr), &reqArgs); err == nil {
-			return reqArgs
+func (svc *ServiceConfig) GetReqArgs() map[string]any {
+	if s := svc.getEnvValue(kReqArgs); s != "" {
+		var v map[string]any
+		if err := json.Unmarshal([]byte(s), &v); err == nil {
+			return v
 		} else {
-			log.Printf("Warning: failed to parse req-args from environment variable for %s: %v", sc.Name, err)
+			log.Printf("Warning: failed to parse req-args for %s: %v", svc.Name, err)
 		}
 	}
 
-	// 如果环境变量不存在或解析失败，使用配置文件中的配置
-	if req, ok := sc.ConfigMap["req-args"].(map[string]any); ok {
-		return req
+	if svc.YAML != nil {
+		return svc.YAML.ReqArgs
 	}
 	return nil
 }
 
-func (sc *ServiceConfig) GetRpm() int {
-	if rpmStr := sc.GetEnvValue("rpm"); rpmStr != "" {
-		if rpm, err := strconv.Atoi(rpmStr); err == nil {
+func (svc *ServiceConfig) GetRpm() int {
+	if s := svc.getEnvValue(kRpm); s != "" {
+		if rpm, err := strconv.Atoi(s); err == nil {
 			return rpm
 		} else {
-			log.Printf("Warning: failed to parse rpm from environment variable for %s: %v", sc.Name, err)
+			log.Printf("Warning: failed to parse rpm for %s: %v", svc.Name, err)
 		}
 	}
 
-	// 如果环境变量不存在或解析失败，使用配置文件中的配置
-	if rpm, ok := sc.ConfigMap["rpm"].(int); ok {
-		return rpm
+	if svc.YAML != nil && svc.YAML.Rpm > 0 {
+		return svc.YAML.Rpm
 	}
 	return 60
 }
 
+/* =========================
+   Utilities
+   ========================= */
+
 func GetAllServiceNames() []string {
-	var names []string
-	for service := range servicesConfig {
-		names = append(names, service)
+	names := make([]string, 0, len(servicesYAML))
+	for name := range servicesYAML {
+		names = append(names, name)
 	}
 	return names
 }
