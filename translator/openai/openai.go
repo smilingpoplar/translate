@@ -52,6 +52,7 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 		middleware.TranslationFix(o.fixes),
 		middleware.RetryWithCache(name, 3, 8),
 		middleware.RateLimit(o.rpm),
+		middleware.Concurrent(100),
 	)
 	o.handler = chain(o.translate)
 
