@@ -10,11 +10,12 @@ import (
 )
 
 const (
-	kOpenAI   = "openai"
-	kRpm      = "rpm"
-	kReqArgs  = "req-args"
-	kRequired = "required"
-	kType     = "type"
+	kOpenAI         = "openai"
+	kRpm            = "rpm"
+	kReqArgs        = "req-args"
+	kRequired       = "required"
+	kType           = "type"
+	kMaxConcurrency = "max-concurrency"
 )
 
 /* =========================
@@ -147,4 +148,19 @@ func (svc *ServiceConfig) GetRpm() int {
 		return svc.YAML.Rpm
 	}
 	return 60
+}
+
+func (svc *ServiceConfig) GetMaxConcurrency() int {
+	if s := svc.getEnvValue(kMaxConcurrency); s != "" {
+		if conc, err := strconv.Atoi(s); err == nil {
+			return conc
+		} else {
+			log.Printf("Warning: failed to parse max-concurrency for %s: %v", svc.Name, err)
+		}
+	}
+
+	if svc.YAML != nil && svc.YAML.MaxConcurrency > 0 {
+		return svc.YAML.MaxConcurrency
+	}
+	return 0 // 0 表示不限制
 }

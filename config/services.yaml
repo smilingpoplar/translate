@@ -4,6 +4,7 @@ openai:
   rpm: 60
 glm:
   type: openai
+  max-concurrency: 100
   req-args:
     thinking:
       type: disabled

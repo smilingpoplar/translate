@@ -25,20 +25,23 @@ type OpenAI struct {
 	fixes   map[string]string
 	onTrans func([]string) error
 	Name    string
-	rpm     int
-	reqArgs map[string]any
 	apiKey  string
+	reqArgs map[string]any
 }
 
 type option func(*OpenAI) error
 
-func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
+func New(sc *config.ServiceConfig, opts ...option) (*OpenAI, error) {
+	name := sc.Name
+	model := sc.GetEnvValue("model")
+	key := sc.GetEnvValue("api-key")
+	baseURL := sc.GetEnvValue("base-url")
+
 	o := &OpenAI{Name: name, model: model}
 	config := oai.DefaultConfig(key)
 	config.BaseURL = baseURL
 	o.config = &config
 	o.client = oai.NewClientWithConfig(config)
-	o.apiKey = key
 
 	for _, opt := range opts {
 		if err := opt(o); err != nil {
@@ -46,15 +49,22 @@ func New(name, key, baseURL, model string, opts ...option) (*OpenAI, error) {
 		}
 	}
 
+	rpm := sc.GetRpm()
+	maxConcurrency := sc.GetMaxConcurrency()
+
 	chain := middleware.Chain(
 		middleware.TextsLimit(2000),
 		middleware.OnTranslated(&o.onTrans),
 		middleware.TranslationFix(o.fixes),
 		middleware.RetryWithCache(name, 3, 8),
-		middleware.RateLimit(o.rpm),
-		middleware.Concurrent(100),
+		middleware.RateLimit(rpm),
+		middleware.Concurrent(maxConcurrency),
 	)
 	o.handler = chain(o.translate)
+
+	// 构造request时使用
+	o.apiKey = key
+	o.reqArgs = sc.GetReqArgs()
 
 	return o, nil
 }
@@ -68,20 +78,6 @@ func WithProxy(proxy string) option {
 func WithFixes(fixes map[string]string) option {
 	return func(o *OpenAI) error {
 		o.fixes = fixes
-		return nil
-	}
-}
-
-func WithRpm(rpm int) option {
-	return func(o *OpenAI) error {
-		o.rpm = rpm
-		return nil
-	}
-}
-
-func WithReqArgs(req map[string]any) option {
-	return func(o *OpenAI) error {
-		o.reqArgs = req
 		return nil
 	}
 }

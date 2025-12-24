@@ -12,10 +12,11 @@ import (
    ========================= */
 
 type ServiceYAML struct {
-	Required []string       `yaml:"required"`
-	Type     string         `yaml:"type"`
-	Rpm      int            `yaml:"rpm"`
-	ReqArgs  map[string]any `yaml:"req-args"`
+	Required       []string       `yaml:"required"`
+	Type           string         `yaml:"type"`
+	Rpm            int            `yaml:"rpm"`
+	MaxConcurrency int            `yaml:"max-concurrency"`
+	ReqArgs        map[string]any `yaml:"req-args"`
 }
 
 type ServicesYAML map[string]*ServiceYAML
@@ -64,6 +65,9 @@ func parseServiceYAML(m map[string]any) *ServiceYAML {
 	if v, ok := m[kRpm].(int); ok {
 		svc.Rpm = v
 	}
+	if v, ok := m[kMaxConcurrency].(int); ok {
+		svc.MaxConcurrency = v
+	}
 	if v, ok := m[kReqArgs].(map[string]any); ok {
 		svc.ReqArgs = v
 	}
@@ -76,9 +80,10 @@ func (svc *ServiceYAML) copy() *ServiceYAML {
 	}
 
 	c := &ServiceYAML{
-		Type:     svc.Type,
-		Rpm:      svc.Rpm,
-		Required: append([]string(nil), svc.Required...),
+		Type:           svc.Type,
+		Rpm:            svc.Rpm,
+		MaxConcurrency: svc.MaxConcurrency,
+		Required:       append([]string(nil), svc.Required...),
 	}
 
 	if svc.ReqArgs != nil {
@@ -103,6 +108,9 @@ func merge(base, override *ServiceYAML) *ServiceYAML {
 	}
 	if override.Rpm > 0 {
 		merged.Rpm = override.Rpm
+	}
+	if override.MaxConcurrency >= 0 {
+		merged.MaxConcurrency = override.MaxConcurrency
 	}
 	if len(override.Required) > 0 {
 		merged.Required = append([]string(nil), override.Required...)
