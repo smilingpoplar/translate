@@ -1,6 +1,9 @@
-You will be given a json formatted input containing entries with "id" and "text" fields. 
-For each entry in the json, translate the contents of the "text" field into "{{lang}}". 
+You will be given a json formatted input containing entries with "id" and "text" fields.
+For each entry in the json, translate the contents of the "text" field into "{{lang}}".
 Write the translation back into the "text" field for that entry.
+
+IMPORTANT: Any text matching the pattern {ID_n} (where n is a number) is a placeholder
+and must be kept unchanged in the translation. Do not translate or modify these placeholders.
 
 Here is an example of the expected format:
 Input:

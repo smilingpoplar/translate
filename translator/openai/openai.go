@@ -22,7 +22,7 @@ type OpenAI struct {
 	model       string
 	prompt      string
 	handler     middleware.Handler
-	fixes       map[string]string
+	glossary    map[string]string
 	onTrans     func([]string) error
 	Name        string
 	apiKey      string
@@ -55,7 +55,7 @@ func New(sc *config.ServiceConfig, opts ...option) (*OpenAI, error) {
 	chain := middleware.Chain(
 		middleware.TextsLimit(2000),
 		middleware.OnTranslated(&o.onTrans),
-		middleware.TranslationFix(o.fixes),
+		middleware.Glossary(o.glossary),
 		middleware.RetryWithCache(name, 3, 8),
 		middleware.RateLimit(rpm),
 		middleware.Concurrent(maxConcurrency),
@@ -75,9 +75,9 @@ func WithProxy(proxy string) option {
 	}
 }
 
-func WithFixes(fixes map[string]string) option {
+func WithGlossary(glossary map[string]string) option {
 	return func(o *OpenAI) error {
-		o.fixes = fixes
+		o.glossary = glossary
 		return nil
 	}
 }

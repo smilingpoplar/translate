@@ -15,19 +15,19 @@ import (
 )
 
 const (
-	kService = "service"
-	kTolang  = "tolang"
-	kEnvFile = "envfile"
-	kProxy   = "proxy"
-	KFixFile = "fixfile"
+	kService   = "service"
+	kTolang    = "tolang"
+	kEnvFile   = "envfile"
+	kProxy     = "proxy"
+	KGlossFile = "glossfile"
 )
 
 var (
-	service string
-	tolang  string
-	envfile string
-	proxy   string
-	fixfile string
+	service   string
+	tolang    string
+	envfile   string
+	proxy     string
+	glossfile string
 )
 
 func main() {
@@ -57,8 +57,8 @@ func initCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&service, kService, "s", "google", services)
 	cmd.Flags().StringVarP(&tolang, kTolang, "t", "zh-CN", "target language")
 	cmd.Flags().StringVarP(&envfile, kEnvFile, "e", "", "env file, search .env upwards if not set")
+	cmd.Flags().StringVarP(&glossfile, KGlossFile, "g", "", "csv file for glossary")
 	cmd.Flags().StringVarP(&proxy, kProxy, "p", "", "http or socks5 proxy,\n eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890")
-	cmd.Flags().StringVarP(&fixfile, KFixFile, "f", "", "csv file to fix translation")
 
 	return cmd
 }
@@ -86,11 +86,11 @@ func initEnv() error {
 }
 
 func translate(args []string) error {
-	fixes, err := util.LoadFixes(fixfile)
+	glossary, err := util.LoadGlossary(glossfile)
 	if err != nil {
 		return err
 	}
-	trans, err := translator.GetTranslator(service, proxy, fixes)
+	trans, err := translator.GetTranslator(service, proxy, glossary)
 	if err != nil {
 		return err
 	}

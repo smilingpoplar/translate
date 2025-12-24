@@ -21,10 +21,10 @@ import (
 const BaseURL = "https://translate.google.com/translate_a/t"
 
 type Google struct {
-	client  *http.Client
-	handler middleware.Handler
-	fixes   map[string]string
-	onTrans func([]string) error
+	client   *http.Client
+	handler  middleware.Handler
+	glossary map[string]string
+	onTrans  func([]string) error
 }
 
 type option func(*Google) error
@@ -41,7 +41,7 @@ func New(opts ...option) (*Google, error) {
 	chain := middleware.Chain(
 		middleware.TextsLimit(1000000),
 		middleware.OnTranslated(&g.onTrans),
-		middleware.TranslationFix(g.fixes),
+		middleware.Glossary(g.glossary),
 		middleware.Retry(5, 5),
 	)
 	g.handler = chain(g.translate)
@@ -55,9 +55,9 @@ func WithProxy(proxy string) option {
 	}
 }
 
-func WithFixes(fixes map[string]string) option {
+func WithGlossary(glossary map[string]string) option {
 	return func(g *Google) error {
-		g.fixes = fixes
+		g.glossary = glossary
 		return nil
 	}
 }
