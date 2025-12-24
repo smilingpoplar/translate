@@ -121,8 +121,7 @@ func (o *OpenAI) OnTranslated(f func([]string) error) {
 	o.onTrans = f
 }
 
-func (o *OpenAI) buildRequest(prompt string) (*http.Request, error) {
-	// Build base request
+func (o *OpenAI) sendRequest(prompt string) (string, error) {
 	request := oai.ChatCompletionRequest{
 		Model: o.model,
 		Messages: []oai.ChatCompletionMessage{
@@ -133,70 +132,66 @@ func (o *OpenAI) buildRequest(prompt string) (*http.Request, error) {
 		},
 	}
 
-	// Convert request to map to merge req parameters
-	requestJSON, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %w", err)
+	// 如果没有额外参数，直接使用库方法
+	if len(o.reqArgs) == 0 {
+		ctx := context.Background()
+		response, err := o.client.CreateChatCompletion(ctx, request)
+		if err != nil {
+			return "", fmt.Errorf("error making request: %w", err)
+		}
+		return response.Choices[0].Message.Content, nil
 	}
 
-	var reqMap map[string]any
-	if err := json.Unmarshal(requestJSON, &reqMap); err != nil {
-		return nil, fmt.Errorf("error unmarshaling request: %w", err)
-	}
-
-	// Merge all req configuration into request
-	maps.Copy(reqMap, o.reqArgs)
-
-	// Marshal final request
-	jsonBody, err := json.Marshal(reqMap)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling final request: %w", err)
-	}
-
-	// Create HTTP request
-	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, "POST", o.config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
-
-	return req, nil
+	// 有额外参数，使用手动构造方式
+	return o.sendRequestWithExtra(request)
 }
 
-func (o *OpenAI) sendRequest(prompt string) (string, error) {
-	// Build request
-	req, err := o.buildRequest(prompt)
+func (o *OpenAI) sendRequestWithExtra(request oai.ChatCompletionRequest) (string, error) {
+	// 序列化request
+	reqJSON, err := json.Marshal(request)
 	if err != nil {
 		return "", err
 	}
 
-	// Make request using HTTP client
+	// 合并额外参数reqArgs
+	var reqMap map[string]any
+	if err := json.Unmarshal(reqJSON, &reqMap); err != nil {
+		return "", err
+	}
+	maps.Copy(reqMap, o.reqArgs)
+	finalJSON, err := json.Marshal(reqMap)
+	if err != nil {
+		return "", err
+	}
+
+	// 构造并发送 HTTP 请求
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		o.config.BaseURL+"/chat/completions", bytes.NewReader(finalJSON))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+
 	resp, err := o.config.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("error making request: %w", err)
+		return "", err
 	}
 	defer resp.Body.Close()
 
-	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("error reading response: %w", err)
+		return "", err
 	}
-
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("API error: %d - %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
 	var response oai.ChatCompletionResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return "", fmt.Errorf("error parsing response: %w", err)
+		return "", err
 	}
-
 	return response.Choices[0].Message.Content, nil
 }
 
