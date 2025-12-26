@@ -56,7 +56,8 @@ func New(sc *config.ServiceConfig, opts ...option) (*OpenAI, error) {
 		middleware.TextsLimit(2000),
 		middleware.OnTranslated(&o.onTrans),
 		middleware.Glossary(o.glossary),
-		middleware.RetryWithCache(name, 3, 8),
+		middleware.Retry(8, 3),
+		middleware.Cache(name),
 		middleware.RateLimit(rpm),
 		middleware.Concurrent(maxConcurrency),
 	)
