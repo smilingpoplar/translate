@@ -59,12 +59,8 @@ func (svc *ServiceConfig) envKey(key string) string {
 	)
 }
 
-func (svc *ServiceConfig) getEnvValue(key string) string {
-	return os.Getenv(svc.envKey(key))
-}
-
 func (svc *ServiceConfig) GetEnvValue(key string) string {
-	return svc.getEnvValue(key)
+	return os.Getenv(svc.envKey(key))
 }
 
 /* =========================
@@ -77,7 +73,7 @@ func (svc *ServiceConfig) ValidateEnvArgs() error {
 	}
 
 	for _, key := range svc.YAML.Required {
-		if svc.getEnvValue(key) == "" {
+		if svc.GetEnvValue(key) == "" {
 			return fmt.Errorf("%s", svc.getEnvArgsInfo())
 		}
 	}
@@ -111,7 +107,7 @@ func (svc *ServiceConfig) getEnvArgsInfo() string {
    ========================= */
 // 环境变量配置JSON串 => map
 func (svc *ServiceConfig) GetRequestArgs() map[string]any {
-	if s := svc.getEnvValue(kRequestArgs); s != "" {
+	if s := svc.GetEnvValue(kRequestArgs); s != "" {
 		var v map[string]any
 		if err := json.Unmarshal([]byte(s), &v); err == nil {
 			return v
@@ -127,7 +123,7 @@ func (svc *ServiceConfig) GetRequestArgs() map[string]any {
 }
 
 func (svc *ServiceConfig) GetRpm() int {
-	if s := svc.getEnvValue(kRpm); s != "" {
+	if s := svc.GetEnvValue(kRpm); s != "" {
 		if rpm, err := strconv.Atoi(s); err == nil {
 			return rpm
 		} else {
@@ -142,7 +138,7 @@ func (svc *ServiceConfig) GetRpm() int {
 }
 
 func (svc *ServiceConfig) GetMaxConcurrency() int {
-	if s := svc.getEnvValue(kMaxConcurrency); s != "" {
+	if s := svc.GetEnvValue(kMaxConcurrency); s != "" {
 		if conc, err := strconv.Atoi(s); err == nil {
 			return conc
 		} else {

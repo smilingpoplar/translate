@@ -1,10 +1,36 @@
 package middleware
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/smilingpoplar/translate/util"
 )
 
+const kCacheTTL = 20 * time.Minute
+
+// 生成缓存key: 服务名:目标语言:原文哈希
+func generateCacheKey(serviceName, toLang, text string) string {
+	hash := sha256.Sum256([]byte(text))
+	textHash := hex.EncodeToString(hash[:8]) // 只用前8字节，节省空间
+	return fmt.Sprintf("%s:%s:%s", serviceName, toLang, textHash)
+}
+
 func Cache(service string) Middleware {
+	file := filepath.Join(os.TempDir(), service+".cache")
+	cache, err := util.NewCache(file, kCacheTTL)
+	if err != nil {
+		log.Printf("Warning: failed to init cache for %s: %v", service, err)
+		return func(handler Handler) Handler {
+			return handler
+		}
+	}
+
 	return func(handler Handler) Handler {
 		return func(texts []string, toLang string) ([]string, error) {
 			results := make([]string, len(texts))
@@ -12,7 +38,8 @@ func Cache(service string) Middleware {
 			// 检查缓存，收集未缓存的文本
 			uncached := make(map[int]string) // 索引 => 文本
 			for i, text := range texts {
-				if cached, found := util.Get(service, toLang, text); found {
+				key := generateCacheKey(service, toLang, text)
+				if cached, found := cache.Get(key); found {
 					results[i] = cached
 				} else {
 					uncached[i] = text
@@ -38,13 +65,13 @@ func Cache(service string) Middleware {
 				return nil, err
 			}
 
-			// 缓存并合并已翻译的结果
+			// 合并且缓存已翻译的结果
 			for i, translated := range translatedTexts {
 				idx, text := indices[i], textsToTranslate[i]
 				results[idx] = translated
-				util.Set(service, toLang, text, translated)
+				key := generateCacheKey(service, toLang, text)
+				cache.Set(key, translated)
 			}
-			util.SaveCache()
 
 			return results, nil
 		}

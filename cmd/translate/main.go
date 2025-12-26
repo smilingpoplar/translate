@@ -125,9 +125,6 @@ func translate(args []string) error {
 		}
 	}
 
-	// 手动保存缓存
-	util.SaveCache()
-
 	return nil
 }
 
@@ -145,7 +142,5 @@ func translateInTerminal(trans translator.Translator) error {
 		}
 		fmt.Fprintln(os.Stdout, result[0])
 	}
-	// 手动保存缓存
-	util.SaveCache()
 	return scanner.Err()
 }
