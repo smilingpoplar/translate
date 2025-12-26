@@ -17,16 +17,16 @@ import (
 )
 
 type OpenAI struct {
-	config      *oai.ClientConfig
-	client      *oai.Client
-	model       string
-	prompt      string
-	handler     middleware.Handler
-	glossary    map[string]string
-	onTrans     func([]string) error
-	Name        string
-	apiKey      string
-	requestArgs map[string]any
+	config    *oai.ClientConfig
+	client    *oai.Client
+	model     string
+	prompt    string
+	handler   middleware.Handler
+	glossary  map[string]string
+	onTrans   func([]string) error
+	Name      string
+	apiKey    string
+	extraBody map[string]any
 }
 
 type option func(*OpenAI) error
@@ -65,7 +65,7 @@ func New(sc *config.ServiceConfig, opts ...option) (*OpenAI, error) {
 
 	// 构造request时使用
 	o.apiKey = key
-	o.requestArgs = sc.GetRequestArgs()
+	o.extraBody = sc.GetExtraBody()
 
 	return o, nil
 }
@@ -131,7 +131,7 @@ func (o *OpenAI) sendRequest(prompt string) (string, error) {
 	}
 
 	// 如果没有额外参数，直接使用库方法
-	if len(o.requestArgs) == 0 {
+	if len(o.extraBody) == 0 {
 		ctx := context.Background()
 		response, err := o.client.CreateChatCompletion(ctx, request)
 		if err != nil {
@@ -151,12 +151,12 @@ func (o *OpenAI) sendRequestWithExtra(request oai.ChatCompletionRequest) (string
 		return "", err
 	}
 
-	// 合并额外参数requestArgs
+	// 合并额外参数extraBody
 	var reqMap map[string]any
 	if err := json.Unmarshal(reqJSON, &reqMap); err != nil {
 		return "", err
 	}
-	maps.Copy(reqMap, o.requestArgs)
+	maps.Copy(reqMap, o.extraBody)
 	finalJSON, err := json.Marshal(reqMap)
 	if err != nil {
 		return "", err

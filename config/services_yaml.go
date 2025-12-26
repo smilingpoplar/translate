@@ -11,7 +11,7 @@ const (
 	kRequired       = "required"
 	kType           = "type"
 	kOpenAI         = "openai"
-	kRequestArgs    = "request-args"
+	kExtraBody      = "extra-body"
 	kRpm            = "rpm"
 	kMaxConcurrency = "max-concurrency"
 )
@@ -25,7 +25,7 @@ type ServiceYAML struct {
 	Type           string         `yaml:"type"`
 	Rpm            int            `yaml:"rpm"`
 	MaxConcurrency int            `yaml:"max-concurrency"`
-	RequestArgs    map[string]any `yaml:"request-args"`
+	ExtraBody      map[string]any `yaml:"extra-body"`
 }
 
 type ServicesYAML map[string]*ServiceYAML
@@ -77,8 +77,8 @@ func parseServiceYAML(m map[string]any) *ServiceYAML {
 	if v, ok := m[kMaxConcurrency].(int); ok {
 		svc.MaxConcurrency = v
 	}
-	if v, ok := m[kRequestArgs].(map[string]any); ok {
-		svc.RequestArgs = v
+	if v, ok := m[kExtraBody].(map[string]any); ok {
+		svc.ExtraBody = v
 	}
 	return svc
 }
@@ -95,9 +95,9 @@ func (svc *ServiceYAML) copy() *ServiceYAML {
 		Required:       append([]string(nil), svc.Required...),
 	}
 
-	if svc.RequestArgs != nil {
-		c.RequestArgs = make(map[string]any, len(svc.RequestArgs))
-		maps.Copy(c.RequestArgs, svc.RequestArgs)
+	if svc.ExtraBody != nil {
+		c.ExtraBody = make(map[string]any, len(svc.ExtraBody))
+		maps.Copy(c.ExtraBody, svc.ExtraBody)
 	}
 
 	return c
@@ -124,8 +124,8 @@ func merge(base, override *ServiceYAML) *ServiceYAML {
 	if len(override.Required) > 0 {
 		merged.Required = append([]string(nil), override.Required...)
 	}
-	if override.RequestArgs != nil {
-		merged.RequestArgs = maps.Clone(override.RequestArgs)
+	if override.ExtraBody != nil {
+		merged.ExtraBody = maps.Clone(override.ExtraBody)
 	}
 	return merged
 }

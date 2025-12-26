@@ -5,11 +5,11 @@ openai:
 glm:
   type: openai
   max-concurrency: 100
-  request-args:
+  extra-body:
     thinking:
       type: disabled
 siliconflow:
   type: openai
   rpm: 300
-  request-args:
+  extra-body:
     enable_thinking: false

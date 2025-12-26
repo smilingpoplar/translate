@@ -76,7 +76,7 @@ func TestGetRpm(t *testing.T) {
 	}
 }
 
-func TestGetRequestArgs(t *testing.T) {
+func TestGetExtraBody(t *testing.T) {
 	tests := []struct {
 		name     string
 		service  string
@@ -84,22 +84,22 @@ func TestGetRequestArgs(t *testing.T) {
 		wantKeys []string
 	}{
 		{
-			name:     "openai no request-args",
+			name:     "openai no extra-body",
 			service:  "openai",
 			wantKeys: []string{},
 		},
 		{
-			name:     "glm has request-args",
+			name:     "glm has extra-body",
 			service:  "glm",
 			wantKeys: []string{"thinking"},
 		},
 		{
-			name:     "siliconflow has request-args",
+			name:     "siliconflow has extra-body",
 			service:  "siliconflow",
 			wantKeys: []string{"enable_thinking"},
 		},
 		{
-			name:     "env override request-args",
+			name:     "env override extra-body",
 			service:  "openai",
 			envArgs:  `{"temperature": 0.5, "top_p": 0.9}`,
 			wantKeys: []string{"temperature", "top_p"},
@@ -114,7 +114,7 @@ func TestGetRequestArgs(t *testing.T) {
 			svc := NewServiceConfig(tt.service)
 
 			if tt.envArgs != "" {
-				envKey := svc.envKey("request-args")
+				envKey := svc.envKey("extra-body")
 				original := os.Getenv(envKey)
 				t.Cleanup(func() {
 					if original == "" {
@@ -125,15 +125,15 @@ func TestGetRequestArgs(t *testing.T) {
 				})
 				os.Setenv(envKey, tt.envArgs)
 			}
-			got := svc.GetRequestArgs()
+			got := svc.GetExtraBody()
 
 			if len(got) != len(tt.wantKeys) {
-				t.Errorf("GetRequestArgs() keys = %v, want %v", keysOf(got), tt.wantKeys)
+				t.Errorf("GetExtraBody() keys = %v, want %v", keysOf(got), tt.wantKeys)
 			}
 
 			for _, key := range tt.wantKeys {
 				if _, ok := got[key]; !ok {
-					t.Errorf("GetRequestArgs() missing key: %s", key)
+					t.Errorf("GetExtraBody() missing key: %s", key)
 				}
 			}
 		})

@@ -106,18 +106,18 @@ func (svc *ServiceConfig) getEnvArgsInfo() string {
    Runtime getters
    ========================= */
 // 环境变量配置JSON串 => map
-func (svc *ServiceConfig) GetRequestArgs() map[string]any {
-	if s := svc.GetEnvValue(kRequestArgs); s != "" {
+func (svc *ServiceConfig) GetExtraBody() map[string]any {
+	if s := svc.GetEnvValue(kExtraBody); s != "" {
 		var v map[string]any
 		if err := json.Unmarshal([]byte(s), &v); err == nil {
 			return v
 		} else {
-			log.Printf("Warning: failed to parse request-args for %s: %v", svc.Name, err)
+			log.Printf("Warning: failed to parse extra-body for %s: %v", svc.Name, err)
 		}
 	}
 
 	if svc.YAML != nil {
-		return svc.YAML.RequestArgs
+		return svc.YAML.ExtraBody
 	}
 	return nil
 }
