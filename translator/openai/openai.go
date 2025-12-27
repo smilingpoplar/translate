@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"time"
 
 	oai "github.com/sashabaranov/go-openai"
 	"github.com/smilingpoplar/translate/config"
@@ -27,17 +28,18 @@ type OpenAI struct {
 	Name      string
 	apiKey    string
 	extraBody map[string]any
+	cache     *util.Cache
 }
 
 type option func(*OpenAI) error
 
 func New(sc *config.ServiceConfig, opts ...option) (*OpenAI, error) {
-	name := sc.Name
+	service := sc.Name
 	model := sc.GetEnvValue("model")
 	key := sc.GetEnvValue("api-key")
 	baseURL := sc.GetEnvValue("base-url")
 
-	o := &OpenAI{Name: name, model: model}
+	o := &OpenAI{Name: service, model: model}
 	config := oai.DefaultConfig(key)
 	config.BaseURL = baseURL
 	o.config = &config
@@ -48,6 +50,11 @@ func New(sc *config.ServiceConfig, opts ...option) (*OpenAI, error) {
 			return nil, fmt.Errorf("error creating openai translator: %w", err)
 		}
 	}
+	if cache, err := util.NewCache(service, 20*time.Minute); err == nil {
+		o.cache = cache
+	} else {
+		return nil, fmt.Errorf("error creating openai translator: %w", err)
+	}
 
 	rpm := sc.GetRpm()
 	maxConcurrency := sc.GetMaxConcurrency()
@@ -57,7 +64,7 @@ func New(sc *config.ServiceConfig, opts ...option) (*OpenAI, error) {
 		middleware.OnTranslated(&o.onTrans),
 		middleware.Glossary(o.glossary),
 		middleware.Retry(8, 3),
-		middleware.Cache(name),
+		middleware.Cache(o.cache),
 		middleware.RateLimit(rpm),
 		middleware.Concurrent(maxConcurrency),
 	)
@@ -99,7 +106,7 @@ func (o *OpenAI) translate(texts []string, toLang string) ([]string, error) {
 	}
 
 	// Parse response using the original texts count
-	parsed, err := ParseResponse(result, len(texts))
+	parsed, err := parseResponse(result, len(texts))
 	if err != nil {
 		return nil, fmt.Errorf("error translating: %w", err)
 	}
@@ -117,6 +124,10 @@ func (o *OpenAI) Translate(texts []string, toLang string) ([]string, error) {
 
 func (o *OpenAI) OnTranslated(f func([]string) error) {
 	o.onTrans = f
+}
+
+func (o *OpenAI) Close() error {
+	return o.cache.Close()
 }
 
 func (o *OpenAI) sendRequest(prompt string) (string, error) {
@@ -198,7 +209,7 @@ type Translation struct {
 	Text string `json:"text"`
 }
 
-func ParseResponse(str string, expectedCount int) ([]string, error) {
+func parseResponse(str string, expectedCount int) ([]string, error) {
 	trans := []Translation{}
 	if err := json.Unmarshal([]byte(str), &trans); err != nil {
 		return nil, fmt.Errorf("error parsing response: %w, response str: %s", transerrors.ErrInvalidJSON, str)

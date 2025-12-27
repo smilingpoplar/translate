@@ -94,6 +94,9 @@ func translate(args []string) error {
 	if err != nil {
 		return err
 	}
+	if c, ok := trans.(io.Closer); ok {
+		defer c.Close()
+	}
 
 	var reader io.Reader = os.Stdin
 	if len(args) == 0 { // 从os.Stdin读取要翻译的文本
