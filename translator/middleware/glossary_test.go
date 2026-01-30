@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"regexp"
 	"testing"
 )
 
@@ -95,8 +96,8 @@ func TestGlossary_WordBoundaryMatching(t *testing.T) {
 // TestGlossary_OverlappingTerms 测试重叠术语处理
 func TestGlossary_OverlappingTerms(t *testing.T) {
 	terms := map[string]string{
-		"AI模型":      "AI模型",
-		"AI":        "AI",
+		"AI模型":   "AI模型",
+		"AI":     "AI",
 		"机器学习模型": "机器学习模型",
 	}
 
@@ -354,6 +355,119 @@ func TestGlossary_LongerTermPriority(t *testing.T) {
 	// "Machine Learning" 应该被作为一个整体匹配
 	// 而不是 "Machine" 被匹配两次
 	expected := "机器学习 is a subset of 机器"
+	if result[0] != expected {
+		t.Errorf("expected %q, got %q", expected, result[0])
+	}
+}
+
+// TestGlossary_SameTranslationShouldUseSamePlaceholder 测试相同译文应该使用同一个占位符
+func TestGlossary_SameTranslationShouldUseSamePlaceholder(t *testing.T) {
+	terms := map[string]string{
+		"AWS":                 "Amazon Web Services",
+		"Amazon Web Services": "Amazon Web Services",
+	}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		text := texts[0]
+		// 应该只有1个唯一占位符
+		uniqueCount := countUniquePlaceholders(text)
+		if uniqueCount != 1 {
+			t.Errorf("expected 1 unique placeholder, got %d. text: %q", uniqueCount, text)
+		}
+		return texts, nil
+	})
+
+	input := []string{"AWS and Amazon Web Services are the same"}
+
+	result, err := handler(input, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := "Amazon Web Services and Amazon Web Services are the same"
+	if result[0] != expected {
+		t.Errorf("expected %q, got %q", expected, result[0])
+	}
+}
+
+func countPlaceholders(s string) int {
+	re := regexp.MustCompile(`\{ID_\d+\}`)
+	return len(re.FindAllStringIndex(s, -1))
+}
+
+func countUniquePlaceholders(s string) int {
+	re := regexp.MustCompile(`\{ID_\d+\}`)
+	matches := re.FindAllString(s, -1)
+	unique := make(map[string]bool)
+	for _, m := range matches {
+		unique[m] = true
+	}
+	return len(unique)
+}
+
+// TestGlossary_ThreeTermsWithTwoUniqueTranslations 测试3个术语但只有2个唯一译文
+func TestGlossary_ThreeTermsWithTwoUniqueTranslations(t *testing.T) {
+	terms := map[string]string{
+		"AWS":                 "Amazon Web Services",
+		"Amazon Web Services": "Amazon Web Services",
+		"Docker":              "Docker",
+	}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		text := texts[0]
+		// 应该有2个唯一占位符：{ID_0} 和 {ID_1}
+		uniqueCount := countUniquePlaceholders(text)
+		if uniqueCount != 2 {
+			t.Errorf("expected 2 unique placeholders, got %d. text: %q", uniqueCount, text)
+		}
+		return texts, nil
+	})
+
+	input := []string{"AWS, Amazon Web Services and Docker"}
+
+	result, err := handler(input, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := "Amazon Web Services, Amazon Web Services and Docker"
+	if result[0] != expected {
+		t.Errorf("expected %q, got %q", expected, result[0])
+	}
+}
+
+// TestGlossary_PlaceholderIdShouldNotExceedUniqueTranslationCount 测试占位符ID不应超过唯一译文数
+func TestGlossary_PlaceholderIdShouldNotExceedUniqueTranslationCount(t *testing.T) {
+	terms := map[string]string{
+		"AWS":      "Amazon Web Services",
+		"EC2":      "Amazon Web Services",
+		"S3":       "Amazon Web Services",
+		"RDS":      "Relational Database Service",
+		"DynamoDB": "DynamoDB",
+	}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		text := texts[0]
+		// 应该只有3个唯一占位符：{ID_0}, {ID_1}, {ID_2}
+		// 最大的ID应该是2，而不是4
+		matches := regexp.MustCompile(`\{ID_(\d+)\}`).FindAllStringSubmatch(text, -1)
+		for _, match := range matches {
+			id := match[1]
+			if id > "2" {
+				t.Errorf("placeholder ID %s exceeds unique translation count (should be 0-2). text: %q", id, text)
+			}
+		}
+		return texts, nil
+	})
+
+	input := []string{"AWS, EC2, S3, RDS, and DynamoDB"}
+
+	result, err := handler(input, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := "Amazon Web Services, Amazon Web Services, Amazon Web Services, Relational Database Service, and DynamoDB"
 	if result[0] != expected {
 		t.Errorf("expected %q, got %q", expected, result[0])
 	}

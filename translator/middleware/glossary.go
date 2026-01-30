@@ -42,7 +42,9 @@ func Glossary(terms map[string]string) Middleware {
 
 		return func(texts []string, toLang string) ([]string, error) {
 			// 阶段1：替换原文为占位符
-			placeholderMap := make(map[string]string)
+			placeholderMap := make(map[string]string)           // 占位符 => 译文
+			translationToPlaceholder := make(map[string]string) // 译文 => 占位符
+			nextID := 0
 			textsWithPlaceholders := make([]string, len(texts))
 
 			for i, text := range texts {
@@ -50,8 +52,13 @@ func Glossary(terms map[string]string) Middleware {
 
 				for _, term := range termList {
 					if term.regex.MatchString(processedText) {
-						placeholder := util.GeneratePlaceholder(len(placeholderMap))
-						placeholderMap[placeholder] = term.to
+						placeholder, exists := translationToPlaceholder[term.to]
+						if !exists {
+							placeholder = util.GeneratePlaceholder(nextID)
+							translationToPlaceholder[term.to] = placeholder
+							placeholderMap[placeholder] = term.to
+							nextID++
+						}
 						processedText = term.regex.ReplaceAllString(processedText, placeholder)
 					}
 				}
