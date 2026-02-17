@@ -140,10 +140,10 @@ func randModelNum(letterCount, digitCount int) string {
 	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	const digits = "0123456789"
 	data := make([]byte, 0, letterCount+digitCount)
-	for i := 0; i < letterCount; i++ {
+	for range letterCount {
 		data = append(data, letters[util.RandInt(0, len(letters))])
 	}
-	for i := 0; i < digitCount; i++ {
+	for range digitCount {
 		data = append(data, digits[util.RandInt(0, len(digits))])
 	}
 	return string(data)

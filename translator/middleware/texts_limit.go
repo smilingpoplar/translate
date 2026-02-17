@@ -82,8 +82,8 @@ func splitLongTexts(texts []string, maxLen int) ([]string, *splitInfo, error) {
 
 func splitLongText(text string, maxLen int) []string {
 	var result []string
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(text, "\n")
+	for line := range lines {
 		if len(line) <= maxLen {
 			result = append(result, line)
 			continue

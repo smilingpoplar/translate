@@ -23,8 +23,8 @@ func SetProxy(addr string, client *http.Client) error {
 		transport = &http.Transport{
 			Proxy: http.ProxyURL(proxyURL),
 		}
-	} else if strings.HasPrefix(addr, "socks5://") {
-		addrNoPrefix := strings.TrimPrefix(addr, "socks5://")
+	} else if after, ok := strings.CutPrefix(addr, "socks5://"); ok {
+		addrNoPrefix := after
 		dialer, err := proxy.SOCKS5("tcp", addrNoPrefix, nil, proxy.Direct)
 		if err != nil {
 			return fmt.Errorf("error creating proxy %s: %w", addr, err)
