@@ -20,6 +20,8 @@ const (
 	kEnvFile   = "envfile"
 	kProxy     = "proxy"
 	KGlossFile = "glossfile"
+	kInput     = "input"
+	kOutput    = "output"
 )
 
 var (
@@ -28,6 +30,8 @@ var (
 	envfile   string
 	proxy     string
 	glossfile string
+	input     string
+	output    string
 )
 
 func main() {
@@ -42,7 +46,8 @@ func initCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Short: "translate text to target language",
 		Use: `translate "hello world"
-  cat input.txt | translate > output.txt`,
+  cat input.txt | translate > output.txt
+  translate -i input.txt -o output.txt`,
 		DisableFlagsInUseLine: true,
 		SilenceErrors:         true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -58,6 +63,8 @@ func initCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&tolang, kTolang, "t", "zh-CN", "target language")
 	cmd.Flags().StringVarP(&envfile, kEnvFile, "e", "", "env file, search .env upwards if not set")
 	cmd.Flags().StringVarP(&glossfile, KGlossFile, "g", "", "csv file for glossary")
+	cmd.Flags().StringVarP(&input, kInput, "i", "", "input file, if set then stdin/pipe is ignored")
+	cmd.Flags().StringVarP(&output, kOutput, "o", "", "output file, if set then stdout redirection is ignored")
 	cmd.Flags().StringVarP(&proxy, kProxy, "p", "", "http or socks5 proxy,\n eg. http://127.0.0.1:7890 or socks5://127.0.0.1:7890")
 
 	return cmd
@@ -98,15 +105,23 @@ func translate(args []string) error {
 		defer c.Close()
 	}
 
-	var reader io.Reader = os.Stdin
-	if len(args) == 0 { // 从os.Stdin读取要翻译的文本
-		if util.IsTerminal() {
-			return translateInTerminal(trans)
-		}
-	} else { // 翻译命令行参数
-		reader = strings.NewReader(strings.Join(args, "\n"))
+	reader, err := getInputReader(args)
+	if err != nil {
+		return err
 	}
-	var writer io.Writer = os.Stdout
+	if reader == nil { // 从终端交互读取要翻译的文本
+		return translateInTerminal(trans)
+	}
+	if c, ok := reader.(io.Closer); ok {
+		defer c.Close()
+	}
+	writer, err := getOutputWriter()
+	if err != nil {
+		return err
+	}
+	if c, ok := writer.(io.Closer); ok {
+		defer c.Close()
+	}
 
 	o, ok := trans.(translator.TranslationObserver)
 	if ok { // 收到分组响应后立即输出
@@ -129,6 +144,37 @@ func translate(args []string) error {
 	}
 
 	return nil
+}
+
+func getInputReader(args []string) (io.Reader, error) {
+	if input != "" { // 从-i读取要翻译的文本
+		f, err := os.Open(input)
+		if err != nil {
+			return nil, fmt.Errorf("open input file: %w", err)
+		}
+		return f, nil
+	}
+
+	if !util.IsTerminal() { // 从os.Stdin读取要翻译的文本
+		return os.Stdin, nil
+	}
+
+	if len(args) > 0 { // 翻译命令行参数
+		return strings.NewReader(strings.Join(args, "\n")), nil
+	}
+
+	return nil, nil
+}
+
+func getOutputWriter() (io.Writer, error) {
+	if output != "" { // 向-o写入翻译结果
+		f, err := os.Create(output)
+		if err != nil {
+			return nil, fmt.Errorf("create output file: %w", err)
+		}
+		return f, nil
+	}
+	return os.Stdout, nil
 }
 
 func translateInTerminal(trans translator.Translator) error {

@@ -10,6 +10,8 @@ go install github.com/smilingpoplar/translate/cmd/translate@latest
 translate "hello world"
 
 cat input.txt | translate > output.txt
+
+translate -i input.txt -o output.txt
 ```
 
 ### 使用 Docker
