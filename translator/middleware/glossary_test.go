@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"regexp"
+	"strconv"
 	"testing"
 )
 
@@ -360,8 +361,8 @@ func TestGlossary_LongerTermPriority(t *testing.T) {
 	}
 }
 
-// TestGlossary_SameTranslationShouldUseSamePlaceholder 测试相同译文应该使用同一个占位符
-func TestGlossary_SameTranslationShouldUseSamePlaceholder(t *testing.T) {
+// TestGlossary_SameTranslationShouldUseDifferentPlaceholders 测试相同译文的不同术语应使用不同占位符
+func TestGlossary_SameTranslationShouldUseDifferentPlaceholders(t *testing.T) {
 	terms := map[string]string{
 		"AWS":                 "Amazon Web Services",
 		"Amazon Web Services": "Amazon Web Services",
@@ -369,10 +370,10 @@ func TestGlossary_SameTranslationShouldUseSamePlaceholder(t *testing.T) {
 
 	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
 		text := texts[0]
-		// 应该只有1个唯一占位符
+		// 两个术语项都命中时应有2个唯一占位符
 		uniqueCount := countUniquePlaceholders(text)
-		if uniqueCount != 1 {
-			t.Errorf("expected 1 unique placeholder, got %d. text: %q", uniqueCount, text)
+		if uniqueCount != 2 {
+			t.Errorf("expected 2 unique placeholders, got %d. text: %q", uniqueCount, text)
 		}
 		return texts, nil
 	})
@@ -405,8 +406,8 @@ func countUniquePlaceholders(s string) int {
 	return len(unique)
 }
 
-// TestGlossary_ThreeTermsWithTwoUniqueTranslations 测试3个术语但只有2个唯一译文
-func TestGlossary_ThreeTermsWithTwoUniqueTranslations(t *testing.T) {
+// TestGlossary_ThreeTermsWithSharedTranslationsShouldUseThreePlaceholders 测试共享译文时仍按术语项生成占位符
+func TestGlossary_ThreeTermsWithSharedTranslationsShouldUseThreePlaceholders(t *testing.T) {
 	terms := map[string]string{
 		"AWS":                 "Amazon Web Services",
 		"Amazon Web Services": "Amazon Web Services",
@@ -415,10 +416,10 @@ func TestGlossary_ThreeTermsWithTwoUniqueTranslations(t *testing.T) {
 
 	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
 		text := texts[0]
-		// 应该有2个唯一占位符：{ID_0} 和 {ID_1}
+		// 三个术语项都命中时应有3个唯一占位符
 		uniqueCount := countUniquePlaceholders(text)
-		if uniqueCount != 2 {
-			t.Errorf("expected 2 unique placeholders, got %d. text: %q", uniqueCount, text)
+		if uniqueCount != 3 {
+			t.Errorf("expected 3 unique placeholders, got %d. text: %q", uniqueCount, text)
 		}
 		return texts, nil
 	})
@@ -436,8 +437,8 @@ func TestGlossary_ThreeTermsWithTwoUniqueTranslations(t *testing.T) {
 	}
 }
 
-// TestGlossary_PlaceholderIdShouldNotExceedUniqueTranslationCount 测试占位符ID不应超过唯一译文数
-func TestGlossary_PlaceholderIdShouldNotExceedUniqueTranslationCount(t *testing.T) {
+// TestGlossary_PlaceholderIdShouldNotExceedTermCount 测试占位符ID不应超过术语项数量
+func TestGlossary_PlaceholderIdShouldNotExceedTermCount(t *testing.T) {
 	terms := map[string]string{
 		"AWS":      "Amazon Web Services",
 		"EC2":      "Amazon Web Services",
@@ -448,14 +449,22 @@ func TestGlossary_PlaceholderIdShouldNotExceedUniqueTranslationCount(t *testing.
 
 	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
 		text := texts[0]
-		// 应该只有3个唯一占位符：{ID_0}, {ID_1}, {ID_2}
-		// 最大的ID应该是2，而不是4
+		// 5 个术语项都命中时，应对应 5 个占位符（ID 范围 0-4）
 		matches := regexp.MustCompile(`\{ID_(\d+)\}`).FindAllStringSubmatch(text, -1)
+		uniqueIDs := make(map[string]struct{})
 		for _, match := range matches {
 			id := match[1]
-			if id > "2" {
-				t.Errorf("placeholder ID %s exceeds unique translation count (should be 0-2). text: %q", id, text)
+			uniqueIDs[id] = struct{}{}
+			idNum, err := strconv.Atoi(id)
+			if err != nil {
+				t.Fatalf("unexpected non-numeric placeholder ID %q: %v", id, err)
 			}
+			if idNum >= len(terms) {
+				t.Errorf("placeholder ID %d exceeds term count range (should be 0-%d). text: %q", idNum, len(terms)-1, text)
+			}
+		}
+		if len(uniqueIDs) != 5 {
+			t.Errorf("expected 5 unique placeholders for 5 matched terms, got %d. text: %q", len(uniqueIDs), text)
 		}
 		return texts, nil
 	})
@@ -470,5 +479,118 @@ func TestGlossary_PlaceholderIdShouldNotExceedUniqueTranslationCount(t *testing.
 	expected := "Amazon Web Services, Amazon Web Services, Amazon Web Services, Relational Database Service, and DynamoDB"
 	if result[0] != expected {
 		t.Errorf("expected %q, got %q", expected, result[0])
+	}
+}
+
+// TestGlossary_ShouldRecoverWhenModelReturnsUnknownPlaceholderIds 测试模型返回未知占位符ID时可恢复
+func TestGlossary_ShouldRecoverWhenModelReturnsUnknownPlaceholderIds(t *testing.T) {
+	terms := map[string]string{
+		"AWS":        "Amazon Web Services",
+		"Docker":     "Docker",
+		"Kubernetes": "Kubernetes",
+	}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		// 模拟模型改写占位符编号：
+		// - {ID_10}、{ID_9} 不在本地生成范围
+		// - {id_1} 大小写被改写
+		return []string{"{ID_10} with {id_1} and {ID_9}"}, nil
+	})
+
+	input := []string{"AWS with Docker and Kubernetes"}
+	result, err := handler(input, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := "Amazon Web Services with Docker and Kubernetes"
+	if result[0] != expected {
+		t.Errorf("expected %q, got %q", expected, result[0])
+	}
+}
+
+// TestGlossary_ShouldRestoreByPlaceholderOccurrenceOrder 测试占位符按出现顺序回填，不依赖返回token值
+func TestGlossary_ShouldRestoreByPlaceholderOccurrenceOrder(t *testing.T) {
+	terms := map[string]string{
+		"AWS":    "Amazon Web Services",
+		"Docker": "Docker",
+		"EC2":    "Elastic Compute Cloud",
+	}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		// 模拟模型把三个占位符都改成同一个 token
+		// 回填仍应按 source 中占位符出现顺序恢复：AWS -> Docker -> EC2
+		return []string{"{ID_9} and {ID_9} and {ID_9}"}, nil
+	})
+
+	input := []string{"AWS and Docker and EC2"}
+	result, err := handler(input, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := "Amazon Web Services and Docker and Elastic Compute Cloud"
+	if result[0] != expected {
+		t.Errorf("expected %q, got %q", expected, result[0])
+	}
+}
+
+// TestGlossary_ShouldRemoveExcessPlaceholders 测试返回占位符多于source时不应残留占位符
+func TestGlossary_ShouldRemoveExcessPlaceholders(t *testing.T) {
+	terms := map[string]string{
+		"AWS": "Amazon Web Services",
+	}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		return []string{"{ID_9} and {ID_8}"}, nil
+	})
+
+	input := []string{"AWS and cloud"}
+	result, err := handler(input, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if regexp.MustCompile(`\{ID_\d+\}`).MatchString(result[0]) {
+		t.Errorf("expected no placeholder left, got %q", result[0])
+	}
+}
+
+// TestGlossary_ShouldRemoveHallucinatedPlaceholdersWhenSourceHasNone 测试source无占位符时也清理返回中的占位符
+func TestGlossary_ShouldRemoveHallucinatedPlaceholdersWhenSourceHasNone(t *testing.T) {
+	terms := map[string]string{
+		"AWS": "Amazon Web Services",
+	}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		return []string{"normal text {ID_42}"}, nil
+	})
+
+	input := []string{"hello world"}
+	result, err := handler(input, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if regexp.MustCompile(`\{ID_\d+\}`).MatchString(result[0]) {
+		t.Errorf("expected no placeholder left, got %q", result[0])
+	}
+}
+
+// TestGlossary_EmptyTermsShouldStillCleanHallucinatedPlaceholders 测试空术语表也应清理幻觉占位符
+func TestGlossary_EmptyTermsShouldStillCleanHallucinatedPlaceholders(t *testing.T) {
+	terms := map[string]string{}
+
+	handler := Glossary(terms)(func(texts []string, toLang string) ([]string, error) {
+		return []string{"hello {ID_20} world"}, nil
+	})
+
+	result, err := handler([]string{"hello world"}, "zh-CN")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if regexp.MustCompile(`\{ID_\d+\}`).MatchString(result[0]) {
+		t.Errorf("expected no placeholder left, got %q", result[0])
 	}
 }
